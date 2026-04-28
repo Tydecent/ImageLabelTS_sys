@@ -1,4 +1,6 @@
 images/
 results/
-assignments.json
+output/
+
+*.json
 students.txt

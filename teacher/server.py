@@ -1,9 +1,9 @@
 """
 教师端服务器 (Flask)
 启动方式：
-    python ./teacher/server.py <图片文件夹路径> <学生名单文件路径>
+    python ./server.py <图片文件夹路径> <学生名单文件路径>
 示例：
-    python ./teacher/server.py ./images students.txt
+    python ./server.py ./images students.txt
 服务器将在 0.0.0.0:5000 上监听，可供局域网内学生访问。
 """
 import os

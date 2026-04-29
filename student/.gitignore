@@ -1,3 +1,10 @@
 workshop/
 .annotator_name
 *.zip
+
+build/
+dist/
+*.spec
+*.egg-info/
+*.egg
+*.py[cod]

@@ -54,7 +54,7 @@ def cli():
 def login(name):
     """登录服务器，检查姓名是否在分配名单中，并获取任务数量"""
     try:
-        resp = requests.get(f"{SERVER_URL}/login", params={"name": name}, timeout=10)
+        resp = requests.get(f"{SERVER_URL}/login", params={"name": name}, timeout=10, verify='server.crt')
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "ok":
@@ -78,7 +78,7 @@ def pull():
 
     # 请求下载 ZIP 包
     try:
-        resp = requests.get(f"{SERVER_URL}/pull", params={"name": name}, timeout=30)
+        resp = requests.get(f"{SERVER_URL}/pull", params={"name": name}, timeout=30, verify='server.crt')
         if resp.status_code != 200:
             click.echo(f"拉取任务失败：HTTP {resp.status_code} - {resp.text}", err=True)
             return
@@ -118,7 +118,7 @@ def _upload_json(file_path: str, name: str) -> bool:
         files = {"file": (os.path.basename(file_path), f, "application/json")}
         try:
             resp = requests.post(
-                f"{SERVER_URL}/push", params={"name": name}, files=files, timeout=30
+                f"{SERVER_URL}/push", params={"name": name}, files=files, timeout=30, verify='server.crt'
             )
             if resp.status_code == 200:
                 click.echo(f"✅ 上传成功：{file_path}")

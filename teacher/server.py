@@ -4,7 +4,7 @@
     python ./server.py <图片文件夹路径> <学生名单文件路径>
 示例：
     python ./server.py ./images students.txt
-服务器将在 0.0.0.0:5000 上监听，可供局域网内学生访问。
+服务器将在 0.0.0.0:12010 上监听，可供局域网内学生访问。
 """
 import os
 import sys
@@ -236,5 +236,8 @@ if __name__ == '__main__':
     # 确保 results 根目录存在
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    print("\n🚀 服务器启动，监听 0.0.0.0:5000 ...")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # 启用HTTPS：
+    ssl_context = ('server.crt', 'server.key')
+
+    print("\n🚀 服务器启动，监听 0.0.0.0:12010 ...")
+    app.run(host='0.0.0.0', port=12010, debug=False, ssl_context=ssl_context)

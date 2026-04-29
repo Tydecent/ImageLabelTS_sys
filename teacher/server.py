@@ -3,7 +3,7 @@
 启动方式：
     python ./server.py <图片文件夹路径> <学生名单文件路径>
 示例：
-    python ./server.py ./images students.txt
+    python ./server.py ./Images students.txt
 服务器将在 0.0.0.0:12010 上监听，可供局域网内学生访问。
 """
 import os
@@ -191,6 +191,66 @@ def push():
     print(f"📥 收到 {name} 的标注: {original_filename}")
 
     return jsonify({"status": "ok"})
+
+@app.route('/reassign', methods=['POST'])
+def reassign():
+    """
+    改派：将一张图片从 A 学生转给 B 学生。
+    请求体 JSON: {"image": "cat.jpg", "from_student": "张三", "to_student": "李四"}
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"status": "error", "message": "请求体必须为 JSON"}), 400
+
+    image = data.get('image', '').strip()
+    from_stu = data.get('from_student', '').strip()
+    to_stu = data.get('to_student', '').strip()
+
+    # 1. 参数完整性
+    if not image or not from_stu or not to_stu:
+        return jsonify({"status": "error", "message": "缺少必要参数 (image, from_student, to_student)"}), 400
+
+    # 2. 图片是否存在（全局图片池）
+    if image not in image_files:
+        return jsonify({"status": "error", "message": f"图片 '{image}' 不在图片库中"}), 400
+
+    # 3. 学生是否合法（必须在名单中，且不能相同）
+    if from_stu not in assignments or to_stu not in assignments:
+        return jsonify({"status": "error", "message": "学生姓名不在名单中"}), 403
+    if from_stu == to_stu:
+        return jsonify({"status": "error", "message": "不能将图片改派给同一个学生"}), 400
+
+    # 4. 图片当前是否属于 from_student
+    if image not in assignments[from_stu]:
+        return jsonify({"status": "error", "message": f"图片 '{image}' 不属于学生 {from_stu}"}), 400
+
+    # 5. 防止 to_student 列表中已存在该图片（重复分配）
+    if image in assignments[to_stu]:
+        return jsonify({"status": "error", "message": f"学生 {to_stu} 已拥有图片 '{image}'"}), 400
+
+    # 6. 执行改派：从 A 移除，加入 B
+    assignments[from_stu].remove(image)
+    assignments[to_stu].append(image)
+
+    # 7. 将更新后的 assignments 写回文件
+    with open(ASSIGNMENTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(assignments, f, ensure_ascii=False, indent=2)
+
+    # 8. 检查是否存在已上传的标注文件，返回警告信息
+    warning = None
+    # 假设 JSON 文件与图片基本名相同
+    base_name = os.path.splitext(image)[0]
+    from_student_dir = get_student_dir(from_stu)
+    possible_json = os.path.join(from_student_dir, base_name + '.json')
+    if os.path.isfile(possible_json):
+        warning = (f"学生 {from_stu} 已为该图片上传标注文件 ({base_name}.json)，"
+                   f"文件仍保留在其目录下，请手动处理")
+
+    return jsonify({
+        "status": "ok",
+        "message": f"已将 '{image}' 从 {from_stu} 改派给 {to_stu}",
+        "warning": warning
+    })
 
 @app.route('/status', methods=['GET'])
 def status():
@@ -820,6 +880,95 @@ def dashboard():
                         width: 100%;
                     }
                 }
+                /* 模态框遮罩 */
+                .modal-overlay {
+                    display: none; /* 默认隐藏 */
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(15, 23, 42, 0.6);
+                    backdrop-filter: blur(2px);
+                    z-index: 1000;
+                    justify-content: center;
+                    align-items: center;
+                }
+                .modal-overlay.active {
+                    display: flex;
+                }
+                .modal-dialog {
+                    background: #fff;
+                    border-radius: var(--radius);
+                    padding: 1.8rem 2rem;
+                    box-shadow: var(--shadow-lg);
+                    max-width: 400px;
+                    width: 90%;
+                    animation: fadeSlideIn 0.2s ease;
+                }
+                .modal-dialog h3 {
+                    margin: 0 0 1rem 0;
+                    font-weight: 700;
+                    color: var(--text);
+                }
+                .modal-dialog .form-row {
+                    margin-bottom: 1.2rem;
+                }
+                .modal-dialog label {
+                    display: block;
+                    font-size: 0.82rem;
+                    font-weight: 600;
+                    color: var(--text-secondary);
+                    margin-bottom: 6px;
+                }
+                .modal-dialog select,
+                .modal-dialog input {
+                    width: 100%;
+                    padding: 10px 12px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-sm);
+                    font-size: 0.9rem;
+                    font-family: var(--font);
+                    transition: border var(--transition);
+                }
+                .modal-dialog select:focus,
+                .modal-dialog input:focus {
+                    outline: none;
+                    border-color: var(--primary);
+                    box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.1);
+                }
+                .modal-actions {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 0.8rem;
+                    margin-top: 1.5rem;
+                }
+                .btn-cancel {
+                    padding: 8px 18px;
+                    border: 1px solid var(--border);
+                    background: #fff;
+                    border-radius: 20px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    transition: background 0.2s;
+                }
+                .btn-cancel:hover { background: #f1f5f9; }
+                .btn-confirm {
+                    padding: 8px 20px;
+                    background: var(--primary);
+                    color: #fff;
+                    border: none;
+                    border-radius: 20px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: background 0.2s;
+                }
+                .btn-confirm:hover { background: var(--primary-hover); }
+
+                .btn-reassign:hover {
+                    background: #e2e8f0 !important;
+                    border-color: #94a3b8 !important;
+                }
             </style>
         </head>
         <body>
@@ -917,6 +1066,7 @@ def dashboard():
                         detailRow.style.display = 'none';
                     });
                     window.studentsData = data.students;
+                    window.allStudentNames = data.students.map(s => s.name);
                 }
 
                 function toggleDetail(idx, stu, btnElement) {
@@ -937,11 +1087,18 @@ def dashboard():
                                                 const icon = isUploaded ? '✓' : '—';
                                                 const badge = isUploaded ? '已上传' : '未上传';
                                                 return `
-                                                    <div class="image-item ${cls}">
-                                                        <span class="status-icon">${icon}</span>
-                                                        <span class="img-name" title="${img}">${img}</span>
-                                                        <span class="img-badge">${badge}</span>
-                                                    </div>`;
+                                                <div class="image-item ${cls}">
+                                                    <span class="status-icon">${icon}</span>
+                                                    <span class="img-name" title="${img}">${img}</span>
+                                                    <span class="img-badge">${badge}</span>
+                                                    <button class="btn-reassign" 
+                                                            data-image="${img}" 
+                                                            data-from="${stu.name}" 
+                                                            title="改派给其他学生"
+                                                            style="margin-left:auto;background:none;border:1px solid #ccc;border-radius:4px;padding:2px 6px;font-size:0.7rem;cursor:pointer;">
+                                                        ⇄ 改派
+                                                    </button>
+                                                </div>`;
                                             }).join('')}
                                         </div>
                                     </div>
@@ -962,7 +1119,121 @@ def dashboard():
                 }
 
                 loadData();
+                // 打开改派模态框
+                function openReassignModal(imageName, fromStudent) {
+                    // 填充图片名和原学生
+                    document.getElementById('reassign-image').value = imageName;
+                    document.getElementById('reassign-from').value = fromStudent;
+                    
+                    // 构建目标学生下拉（排除 fromStudent）
+                    const select = document.getElementById('reassign-to');
+                    select.innerHTML = '<option value="">-- 请选择 --</option>';
+                    if (window.allStudentNames) {
+                        window.allStudentNames
+                            .filter(name => name !== fromStudent)
+                            .forEach(name => {
+                                const opt = document.createElement('option');
+                                opt.value = name;
+                                opt.textContent = name;
+                                select.appendChild(opt);
+                            });
+                    }
+                    // 隐藏警告
+                    document.getElementById('reassign-warning').style.display = 'none';
+                    
+                    // 显示模态框
+                    document.getElementById('reassign-modal').classList.add('active');
+                }
+
+                // 关闭模态框
+                function closeReassignModal() {
+                    document.getElementById('reassign-modal').classList.remove('active');
+                }
+
+                // 执行改派请求
+                async function submitReassign() {
+                    const image = document.getElementById('reassign-image').value;
+                    const fromStu = document.getElementById('reassign-from').value;
+                    const toStu = document.getElementById('reassign-to').value;
+
+                    if (!toStu) {
+                        alert('请选择目标学生');
+                        return;
+                    }
+
+                    const resp = await fetch('/reassign', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image: image,
+                            from_student: fromStu,
+                            to_student: toStu
+                        })
+                    });
+                    const result = await resp.json();
+                    if (result.status === 'ok') {
+                        alert(result.message + (result.warning ? '\n⚠️ ' + result.warning : ''));
+                        closeReassignModal();
+                        // 重新加载面板数据
+                        await loadData();
+                        // 关闭当前所有展开的详情（避免数据错乱）
+                        document.querySelectorAll('.detail-row').forEach(row => row.style.display = 'none');
+                        document.querySelectorAll('.btn-detail.expanded').forEach(btn => {
+                            btn.classList.remove('expanded');
+                            btn.innerHTML = '查看图片 <span class="arrow-icon">▾</span>';
+                        });
+                    } else {
+                        alert('改派失败：' + result.message);
+                    }
+                }
+
+                // ——— 绑定初始事件（在页面加载后执行）———
+                // 因为 loadData 是异步加载的，绑定点击事件需要用事件委托，避免按钮刷新后失效
+                document.addEventListener('click', function(e) {
+                    // 点击按钮打开改派
+                    if (e.target && e.target.classList.contains('btn-reassign')) {
+                        const image = e.target.getAttribute('data-image');
+                        const from = e.target.getAttribute('data-from');
+                        openReassignModal(image, from);
+                    }
+                });
+
+                // 模态框关闭按钮
+                document.addEventListener('DOMContentLoaded', function() {
+                    document.getElementById('modal-cancel-btn').addEventListener('click', closeReassignModal);
+                    document.getElementById('modal-confirm-btn').addEventListener('click', submitReassign);
+                    // 点击遮罩层也可关闭
+                    document.getElementById('reassign-modal').addEventListener('click', function(e) {
+                        if (e.target === this) closeReassignModal();
+                    });
+                });
             </script>
+
+            <!-- 改派模态框 -->
+            <div class="modal-overlay" id="reassign-modal">
+                <div class="modal-dialog">
+                    <h3>✋ 图片改派</h3>
+                    <div class="form-row">
+                        <label>图片名称</label>
+                        <input type="text" id="reassign-image" readonly>
+                    </div>
+                    <div class="form-row">
+                        <label>原归属学生</label>
+                        <input type="text" id="reassign-from" readonly>
+                    </div>
+                    <div class="form-row">
+                        <label>新归属学生</label>
+                        <select id="reassign-to">
+                            <option value="">-- 请选择 --</option>
+                        </select>
+                    </div>
+                    <div id="reassign-warning" style="color:#e67e22;font-size:0.78rem;margin-top:8px;display:none;"></div>
+                    <div class="modal-actions">
+                        <button class="btn-cancel" id="modal-cancel-btn">取消</button>
+                        <button class="btn-confirm" id="modal-confirm-btn">确认改派</button>
+                    </div>
+                </div>
+            </div>
         </body>
         </html>
     '''
@@ -1024,7 +1295,7 @@ if __name__ == '__main__':
     # 处理命令行参数
     if len(sys.argv) != 3:
         print("用法: python server.py <图片文件夹> <学生名单文件>")
-        print("示例: python server.py ./images students.txt")
+        print("示例: python server.py ./Images students.txt")
         sys.exit(1)
 
     IMAGE_DIR = sys.argv[1]

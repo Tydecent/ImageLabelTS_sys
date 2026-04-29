@@ -11,10 +11,14 @@ import os
 import zipfile
 import requests
 import click
+import json
 
 # ==================== 配置区 ====================
 # 教师服务器的根地址，请根据实际情况修改 IP 和端口
-SERVER_URL = "http://127.0.0.1:5000"
+# 加载 config.json 文件
+with open('config.json', 'r', encoding='utf-8') as config_file:
+    config = json.load(config_file)
+    SERVER_URL = config.get("server_url", "http://127.0.0.1:5000")
 
 # 本地工作目录（存放解压后的图片和 JSON 文件）
 WORKSPACE_DIR = "./workshop"

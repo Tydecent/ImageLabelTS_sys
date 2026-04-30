@@ -103,6 +103,27 @@ def pull():
     except Exception as e:
         click.echo(f"解压失败：{e}", err=True)
         return
+    
+    # 在解压后，获取当前应分配的图片列表
+    try:
+        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify='server.crt')
+        if resp.status_code == 200:
+            data = resp.json()
+            active_images = data.get('assigned_images', [])
+            active_basenames = {os.path.splitext(img)[0] for img in active_images}
+        else:
+            active_basenames = set()
+    except Exception:
+        active_basenames = set()
+
+    # 清理 workshop 中的无效 JSON
+    if os.path.isdir(WORKSPACE_DIR):
+        for fname in os.listdir(WORKSPACE_DIR):
+            if fname.lower().endswith('.json'):
+                base = os.path.splitext(fname)[0]
+                if active_basenames and base not in active_basenames:
+                    os.remove(os.path.join(WORKSPACE_DIR, fname))
+                    click.echo(f"已删除失效标注文件：{fname}")
 
     click.echo("提示：请使用 LabelMe 打开 workshop 目录中的图片进行标注，标注后 JSON 文件会自动保存在同一目录。")
 
@@ -155,6 +176,25 @@ def push():
             success += 1
 
     click.echo(f"上传完成：成功 {success} / 总计 {len(json_files)}")
+
+@cli.command()
+def status():
+    """查看任务进度及分配图片列表"""
+    name = get_saved_name()
+    if not name:
+        return
+    try:
+        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify='server.crt')
+        if resp.status_code != 200:
+            click.echo(f"获取状态失败：{resp.text}", err=True)
+            return
+        data = resp.json()
+        click.echo(f"任务进度：{data['uploaded']}/{data['total']} 已完成，剩余 {data['unuploaded']} 张")
+        click.echo("当前分配图片：")
+        for img in data.get('assigned_images', []):
+            click.echo(f"  - {img}")
+    except Exception as e:
+        click.echo(f"请求失败：{e}", err=True)
 
 if __name__ == "__main__":
     cli()

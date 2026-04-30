@@ -271,11 +271,13 @@ def status():
         task_basenames = set(get_task_image_basenames(name))
         uploaded = len(basename_jsons & task_basenames)
 
-    return jsonify({
-        "uploaded": uploaded,
-        "unuploaded": total - uploaded,
-        "total": total
-    })
+        assigned_images = assignments.get(name, [])   # 原始文件名列表
+        return jsonify({
+            "uploaded": uploaded,
+            "unuploaded": total - uploaded,
+            "total": total,
+            "assigned_images": assigned_images        # 新增
+        })
 
 # ---------- 前端页面 ----------
 @app.route('/dashboard')

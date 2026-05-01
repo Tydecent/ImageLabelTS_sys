@@ -13,6 +13,7 @@ import random
 import zipfile
 import io
 from flask import Flask, request, jsonify, send_file
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -22,6 +23,8 @@ STUDENTS_FILE = ""      # 学生名单文件路径，通过命令行参数传入
 ASSIGNMENTS_FILE = "assignments.json"   # 分配结果保存文件
 RESULTS_DIR = "results"                 # 学生上传的 JSON 结果存放根目录
 SUPPORTED_IMG_EXT = ('.jpg', '.jpeg', '.png')
+LAST_PUSH_FILE = "last_push_times.json"
+last_push_times = {}    # 格式：{"张三": "2025-04-01T14:35:22", ...}
 
 # 内存中的数据结构
 students = []           # 学生名单列表
@@ -101,6 +104,22 @@ def get_task_image_basenames(name):
     if name not in assignments:
         return []
     return [os.path.splitext(img)[0] for img in assignments[name]]
+def load_last_push_times():
+    global last_push_times
+    if os.path.exists(LAST_PUSH_FILE):
+        try:
+            with open(LAST_PUSH_FILE, 'r', encoding='utf-8') as f:
+                last_push_times = json.load(f)
+            print(f"✅ 已加载最后推送时间记录 ({len(last_push_times)} 条)")
+        except Exception as e:
+            print(f"⚠️ 读取 {LAST_PUSH_FILE} 失败: {e}")
+            last_push_times = {}
+    else:
+        last_push_times = {}
+
+def save_last_push_times():
+    with open(LAST_PUSH_FILE, 'w', encoding='utf-8') as f:
+        json.dump(last_push_times, f, ensure_ascii=False, indent=2)
 
 # ---------- API 端点 ----------
 @app.route('/login', methods=['GET'])
@@ -189,6 +208,9 @@ def push():
     save_path = os.path.join(student_dir, original_filename)
     file.save(save_path)
     print(f"📥 收到 {name} 的标注: {original_filename}")
+    # 记录最后推送时间
+    last_push_times[name] = datetime.now().isoformat()
+    save_last_push_times()
 
     return jsonify({"status": "ok"})
 
@@ -998,6 +1020,7 @@ def dashboard():
                             <tr>
                                 <th>姓名</th>
                                 <th>完成进度</th>
+                                <th>最后上传时间</th>
                                 <th style="text-align:center;">详情</th>
                             </tr>
                         </thead>
@@ -1007,6 +1030,14 @@ def dashboard():
             </div>
 
             <script>
+                // 增加时间格式化函数
+                function formatTime(isoString) {
+                    if (!isoString) return '未上传';
+                    const date = new Date(isoString);
+                    // 本地化格式：2025-04-01 14:35:22
+                    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;
+                }
+
                 async function loadData() {
                     const resp = await fetch('/api/overview');
                     const data = await resp.json();
@@ -1046,8 +1077,12 @@ def dashboard():
                                         <span class="progress-fraction">${stu.uploaded}/${stu.total} (${percent}%)</span>
                                     </div>
                                 `;
+
+                        const timeCell = row.insertCell(2);
+                        timeCell.innerText = formatTime(stu.last_push);
+
                         // 按钮
-                        const btnCell = row.insertCell(2);
+                        const btnCell = row.insertCell(3);
                         const btn = document.createElement('button');
                         btn.className = 'btn-detail';
                         btn.innerHTML = '查看图片 <span class="arrow-icon">▾</span>';
@@ -1061,7 +1096,7 @@ def dashboard():
                         detailRow.className = 'detail-row';
                         detailRow.id = `detail-${idx}`;
                         const detailCell = detailRow.insertCell(0);
-                        detailCell.colSpan = 3;
+                        detailCell.colSpan = 4;
                         detailCell.innerHTML =
                             '<div id="detail-content-' + idx +
                             '" style="min-height:20px;"><span class="loading-text">点击查看后加载…</span></div>';
@@ -1174,7 +1209,7 @@ def dashboard():
                     });
                     const result = await resp.json();
                     if (result.status === 'ok') {
-                        alert(result.message + (result.warning ? '\n⚠️ ' + result.warning : ''));
+                        alert(result.message + (result.warning ? '⚠️ ' + result.warning : ''));
                         closeReassignModal();
                         // 重新加载面板数据
                         await loadData();
@@ -1278,12 +1313,15 @@ def api_overview():
                 uploaded_images.append(base)
         uploaded_all += uploaded
 
+        last_push = last_push_times.get(student) # 可能为 None
+
         overview["students"].append({
             "name": student,
             "total": total,
             "uploaded": uploaded,
-            "images": images,                     # 原始图片文件名列表，如 ["cat.jpg","dog.png"]
-            "uploaded_images": uploaded_images   # 已上传的图片基本名列表
+            "images": images,                   # 原始图片文件名列表，如 ["cat.jpg","dog.png"]
+            "uploaded_images": uploaded_images, # 已上传的图片基本名列表
+            "last_push": last_push              # 最后提交时间，ISO 格式字符串或 null
         })
 
     overview["total_overall"] = {
@@ -1307,6 +1345,7 @@ if __name__ == '__main__':
     load_students()
     load_images()
     assign_images()
+    load_last_push_times()  # 参考https://chat.deepseek.com/share/qudm5z8j7ut0ez04wz
 
     # 确保 results 根目录存在
     os.makedirs(RESULTS_DIR, exist_ok=True)

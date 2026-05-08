@@ -360,6 +360,11 @@ def api_overview():
     }
     return jsonify(overview)
 
+@app.route("/health")
+def health_check():
+    """健康检查端点，用于监控"""
+    return jsonify({'status': 'ok'}), 200
+
 # ---------- 启动入口 ----------
 if __name__ == '__main__':
     # 处理命令行参数
@@ -380,8 +385,13 @@ if __name__ == '__main__':
     # 确保 results 根目录存在
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    # 启用HTTPS：
-    ssl_context = ('server.crt', 'server.key')
-
     print("\n🚀 服务器启动，监听 0.0.0.0:12010 ...")
-    app.run(host='0.0.0.0', port=12010, debug=False, ssl_context=ssl_context)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+
+    # 创建 Gevent WSGI 服务器
+    from gevent.pywsgi import WSGIServer
+    http_server = WSGIServer(('0.0.0.0', 12010), 
+                             app,
+                             )
+    print("\n🚀 Gevent 服务器启动，监听 0.0.0.0:12010 ...")
+    http_server.serve_forever()

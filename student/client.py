@@ -12,6 +12,9 @@ import zipfile
 import requests
 import click
 import json
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
 # ==================== 配置区 ====================
 # 教师服务器的根地址，请根据实际情况修改 IP 和端口
@@ -41,6 +44,34 @@ def save_name(name: str):
     """将学生姓名保存到本地文件"""
     with open(NAME_FILE, "w", encoding="utf-8") as f:
         f.write(name.strip())
+
+def setup_logging():
+    """配置日志：同时输出到控制台和文件，文件保存在 ./_log/ 目录下"""
+    # 参见https://chat.deepseek.com/share/im8qe7wn8s6d7k3mee
+    log_dir = "./_log"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"client_{datetime.now().strftime('%Y%m%d')}.log")
+    
+    # 创建 logger
+    logger = logging.getLogger('AnnotatorClient')
+    logger.setLevel(logging.DEBUG)
+    
+    # 文件处理器（按大小轮转，每个最大5MB，保留3个备份）
+    file_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    
+    # 控制台处理器（只输出 INFO 及以上，也可保留）
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(console_formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    return logger
+
 
 
 @click.group()

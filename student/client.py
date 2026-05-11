@@ -211,5 +211,44 @@ def clean():
     else:
         click.echo("操作已取消。")
 
+@cli.command()
+def update():
+    """从更新服务器下载最新客户端包并增量覆盖当前目录"""
+    # 读取配置中的更新服务器地址
+    update_url = config.get("update_server_url")
+    if not update_url:
+        click.echo("错误：config.json 中未配置 'update_server_url'", err=True)
+        return
+
+    click.echo(f"正在从 {update_url} 获取更新包...")
+    try:
+        # 流式下载，避免大文件占用过多内存
+        resp = requests.get(update_url, stream=True, timeout=30, verify='server.crt')
+        if resp.status_code != 200:
+            click.echo(f"下载失败：HTTP {resp.status_code}", err=True)
+            return
+
+        # 保存到临时 ZIP 文件
+        import tempfile
+        fd, tmp_zip = tempfile.mkstemp(suffix=".zip")
+        os.close(fd)
+        total_size = int(resp.headers.get('content-length', 0))
+        with open(tmp_zip, 'wb') as f:
+            with click.progressbar(length=total_size, label="下载进度") as bar:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    bar.update(len(chunk))
+
+        # 解压到当前目录（增量覆盖）
+        click.echo("正在解压更新包...")
+        with zipfile.ZipFile(tmp_zip, 'r') as zf:
+            zf.extractall(".")   # 直接解压到当前工作目录（client.exe 所在处）
+        click.echo("更新完成！请重新启动客户端以使更新生效。")
+
+        # 清理临时文件
+        os.remove(tmp_zip)
+    except Exception as e:
+        click.echo(f"更新失败：{e}", err=True)
+
 if __name__ == "__main__":
     cli()

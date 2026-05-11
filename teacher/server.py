@@ -6,6 +6,9 @@
     python ./server.py ./Images students.txt
 服务器将在 0.0.0.0:12010 上监听，可供局域网内学生访问。
 """
+from gevent import monkey
+monkey.patch_all()
+
 import os
 import sys
 import json
@@ -366,32 +369,32 @@ def health_check():
     return jsonify({'status': 'ok'}), 200
 
 # ---------- 启动入口 ----------
-if __name__ == '__main__':
-    # 处理命令行参数
-    if len(sys.argv) != 3:
-        print("用法: python server.py <图片文件夹> <学生名单文件>")
-        print("示例: python server.py ./Images students.txt")
-        sys.exit(1)
 
-    IMAGE_DIR = sys.argv[1]
-    STUDENTS_FILE = sys.argv[2]
+# 处理命令行参数
+if len(sys.argv) != 3:
+    print("用法: python server.py <图片文件夹> <学生名单文件>")
+    print("示例: python server.py ./Images students.txt")
+    sys.exit(1)
 
-    # 初始化：加载名单、图片、分配
-    load_students()
-    load_images()
-    assign_images()
-    load_last_push_times()  # 参考https://chat.deepseek.com/share/qudm5z8j7ut0ez04wz
+IMAGE_DIR = sys.argv[1]
+STUDENTS_FILE = sys.argv[2]
 
-    # 确保 results 根目录存在
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+# 初始化：加载名单、图片、分配
+load_students()
+load_images()
+assign_images()
+load_last_push_times()  # 参考https://chat.deepseek.com/share/qudm5z8j7ut0ez04wz
 
-    print("\n🚀 服务器启动，监听 0.0.0.0:12010 ...")
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+# 确保 results 根目录存在
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    # 创建 Gevent WSGI 服务器
-    from gevent.pywsgi import WSGIServer
-    http_server = WSGIServer(('0.0.0.0', 12010), 
-                             app,
-                             )
-    print("\n🚀 Gevent 服务器启动，监听 0.0.0.0:12010 ...")
-    http_server.serve_forever()
+print("\n🚀 服务器启动，监听 0.0.0.0:12010 ...")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+# 创建 Gevent WSGI 服务器
+from gevent.pywsgi import WSGIServer
+http_server = WSGIServer(('0.0.0.0', 12010), 
+                            app,
+                            )
+print("\n🚀 Gevent 服务器启动，监听 0.0.0.0:12010 ...")
+http_server.serve_forever()

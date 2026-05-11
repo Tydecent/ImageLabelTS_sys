@@ -308,7 +308,7 @@ def status():
 @app.route('/dashboard')
 def dashboard():
     """教师端可视化面板"""
-    return render_template('dashbord.html')
+    return render_template('dashboard.html')
 
 @app.route('/api/overview')
 def api_overview():

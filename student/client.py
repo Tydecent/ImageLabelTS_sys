@@ -195,6 +195,21 @@ def status():
             click.echo(f"  - {img}")
     except Exception as e:
         click.echo(f"请求失败：{e}", err=True)
+        
+@cli.command()
+def clean():
+    """删除 workspace 目录及其所有内容（清除本地的图片和标注文件）"""
+    if not os.path.exists(WORKSPACE_DIR):
+        click.echo(f"工作目录 {WORKSPACE_DIR} 不存在，无需清理。")
+        return
+
+    # 交互确认防止误删
+    if click.confirm(f"即将删除整个目录 '{WORKSPACE_DIR}'，其中包含的所有图片和标注文件都将丢失。确定要执行吗？"):
+        import shutil
+        shutil.rmtree(WORKSPACE_DIR)
+        click.echo(f"已删除目录：{WORKSPACE_DIR}")
+    else:
+        click.echo("操作已取消。")
 
 if __name__ == "__main__":
     cli()

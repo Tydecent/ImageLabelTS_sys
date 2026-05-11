@@ -66,16 +66,18 @@ ImageLabelTS_sys.client/
 
 该命令会将你本地的workshop文件夹下所有的json文件推送至服务器。
 
-## 5. 注意事项
-### 5.1 证书更换
-当要求更换证书时，你需要立即将我们提供的新证书文件`server.crt`覆盖掉原有的`server.crt`。
+## 4.4 清理工作区
+当新一批数据被上传至服务器，或者服务管理员要求清理工作区时，执行以下命令清理工作区：
+```cmd
+.\ImageLabelTS.client.exe clean
+```
+执行该命令会清除`workshop`文件夹下的全部文件，请谨慎使用。
 
-### 5.2 服务器例行维护
-服务器每天都会进行例行维护与日志审计，期间服务端可能不稳定/不可用。
-维护时间另行通知。
-
-### 5.3 服务器地址变更
-服务器地址可能会变更，当被要求更换服务器地址时，你需要修改`config.json`文件中的`server_url`字段。
+# 4.5 更新客户端
+当被要求更新客户端时，执行以下命令更新客户端：
+```cmd
+.\ImageLabelTS.client.exe update
+```
 
 以上。
-*<div style="text-align: right;">黄浦巍<br>2026年4月30日</div>*
+*<div style="text-align: right;">黄浦巍<br>2026年5月11日</div>*

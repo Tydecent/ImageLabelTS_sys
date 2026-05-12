@@ -87,7 +87,7 @@ def login(name):
     """登录服务器，检查姓名是否在分配名单中，并获取任务数量"""
     LOGGER.info("登录：姓名：{name}")
     try:
-        resp = requests.get(f"{SERVER_URL}/login", params={"name": name}, timeout=10, verify='server.crt')
+        resp = requests.get(f"{SERVER_URL}/login", params={"name": name}, timeout=10, verify=True)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "ok":
@@ -112,7 +112,7 @@ def pull():
 
     # 请求下载 ZIP 包
     try:
-        resp = requests.get(f"{SERVER_URL}/pull", params={"name": name}, timeout=30, verify='server.crt')
+        resp = requests.get(f"{SERVER_URL}/pull", params={"name": name}, timeout=30, verify=True)
         if resp.status_code != 200:
             LOGGER.error(f"拉取任务失败：HTTP {resp.status_code} - {resp.text}")
             return
@@ -140,7 +140,7 @@ def pull():
     
     # 在解压后，获取当前应分配的图片列表
     try:
-        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify='server.crt')
+        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify=True)
         if resp.status_code == 200:
             data = resp.json()
             active_images = data.get('assigned_images', [])
@@ -173,7 +173,7 @@ def _upload_json(file_path: str, name: str) -> bool:
         files = {"file": (os.path.basename(file_path), f, "application/json")}
         try:
             resp = requests.post(
-                f"{SERVER_URL}/push", params={"name": name}, files=files, timeout=30, verify='server.crt'
+                f"{SERVER_URL}/push", params={"name": name}, files=files, timeout=30, verify=True
             )
             if resp.status_code == 200:
                 LOGGER.info(f"✅ 上传成功：{file_path}")
@@ -218,7 +218,7 @@ def status():
     if not name:
         return
     try:
-        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify='server.crt')
+        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify=True)
         if resp.status_code != 200:
             LOGGER.error(f"获取状态失败：{resp.text}")
             return
@@ -257,7 +257,7 @@ def update():
     LOGGER.info(f"正在从 {update_url} 获取更新包...")
     try:
         # 流式下载，避免大文件占用过多内存
-        resp = requests.get(update_url, stream=True, timeout=30, verify='server.crt')
+        resp = requests.get(update_url, stream=True, timeout=30, verify=True)
         if resp.status_code != 200:
             LOGGER.error(f"下载失败：HTTP {resp.status_code}")
             return
@@ -283,6 +283,51 @@ def update():
         os.remove(tmp_zip)
     except Exception as e:
         LOGGER.error(f"更新失败：{e}")
+
+@cli.command()
+def upload_log():
+    """上传日志文件到遥测服务器（需在 config 中开启遥测）"""
+    # 检查遥测是否启用
+    telemetry_enabled = config.get("telemetry_enabled", False)
+    telemetry_url = config.get("telemetry_server_url")
+    
+    if not telemetry_enabled:
+        click.echo("遥测功能未开启，请在 config.json 中设置 telemetry_enabled=true")
+        return
+    if not telemetry_url:
+        click.echo("错误：未配置 telemetry_server_url", err=True)
+        return
+    
+    # 查找日志文件
+    log_dir = "./_log"
+    if not os.path.isdir(log_dir):
+        click.echo("没有找到日志目录，请先运行程序产生日志。")
+        return
+    
+    # 获取最新的日志文件（按修改时间排序）
+    log_files = [f for f in os.listdir(log_dir) if f.endswith('.log')]
+    if not log_files:
+        click.echo("没有找到日志文件")
+        return
+    latest_log = max(log_files, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
+    log_path = os.path.join(log_dir, latest_log)
+    
+    click.echo(f"准备上传日志文件：{latest_log}")
+    try:
+        with open(log_path, 'rb') as f:
+            files = {'log_file': (latest_log, f, 'text/plain')}
+            # 可选：添加客户端标识（如主机名、用户名等）
+            data = {'client_name': get_saved_name() or 'anonymous'}
+            resp = requests.post(telemetry_url, files=files, data=data, timeout=30, verify=True)
+        if resp.status_code == 200:
+            click.echo("日志上传成功")
+            LOGGER.info(f"日志文件 {latest_log} 已上传至遥测服务器")
+        else:
+            click.echo(f"上传失败：HTTP {resp.status_code} - {resp.text}", err=True)
+            LOGGER.error(f"上传日志失败：{resp.status_code} {resp.text}")
+    except Exception as e:
+        click.echo(f"上传异常：{e}", err=True)
+        LOGGER.exception("上传日志时发生异常")
 
 if __name__ == "__main__":
     cli()

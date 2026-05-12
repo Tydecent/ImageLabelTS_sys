@@ -12,7 +12,7 @@ class TeacherUser(HttpUser):
     def pull_task(self):
         # 注意：服务器启用了 HTTPS，需要 verify=False 或提供证书
         with self.client.get(f"/pull?name={self.student_name}",
-                             verify='../teacher/server.crt',
+                             verify=False,
                              catch_response=True) as response:
             if response.status_code != 200:
                 response.failure(f"Unexpected status {response.status_code}")

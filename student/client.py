@@ -34,7 +34,7 @@ NAME_FILE = ".annotator_name"
 def get_saved_name():
     """从本地文件中读取已保存的学生姓名"""
     if not os.path.exists(NAME_FILE):
-        click.echo("错误：尚未登录，请先运行 'client login <姓名>'", err=True)
+        LOGGER.error("错误：尚未登录，请先运行 'client login <姓名>'")
         return None
     with open(NAME_FILE, "r", encoding="utf-8") as f:
         return f.read().strip()
@@ -72,7 +72,8 @@ def setup_logging():
     logger.addHandler(console_handler)
     return logger
 
-
+# 全局 logger 实例
+LOGGER = setup_logging()
 
 @click.group()
 def cli():
@@ -84,6 +85,7 @@ def cli():
 @click.argument("name")
 def login(name):
     """登录服务器，检查姓名是否在分配名单中，并获取任务数量"""
+    LOGGER.info("登录：姓名：{name}")
     try:
         resp = requests.get(f"{SERVER_URL}/login", params={"name": name}, timeout=10, verify='server.crt')
         if resp.status_code == 200:
@@ -91,18 +93,19 @@ def login(name):
             if data.get("status") == "ok":
                 task_count = data.get("task_count", 0)
                 save_name(name)
-                click.echo(f"登录成功！姓名：{name}，分配到的图片数量：{task_count}")
+                LOGGER.info(f"登录成功！姓名：{name}，分配到的图片数量：{task_count}")
             else:
-                click.echo(f"登录失败：服务器返回状态异常 {data}", err=True)
+                LOGGER.error(f"登录失败：服务器返回状态异常 {data}")
         else:
-            click.echo(f"登录失败：HTTP {resp.status_code} - {resp.text}", err=True)
+            LOGGER.error(f"登录失败：HTTP {resp.status_code} - {resp.text}")
     except Exception as e:
-        click.echo(f"登录失败，网络或服务器错误：{e}", err=True)
+        LOGGER.error(f"登录失败，网络或服务器错误：{e}")
 
 
 @cli.command()
 def pull():
     """从服务器下载分配给当前学生的任务包（原始图片 + 已上传的 JSON），并自动解压到 workspace 目录"""
+    LOGGER.info("开始执行PULL")
     name = get_saved_name()
     if not name:
         return
@@ -111,28 +114,28 @@ def pull():
     try:
         resp = requests.get(f"{SERVER_URL}/pull", params={"name": name}, timeout=30, verify='server.crt')
         if resp.status_code != 200:
-            click.echo(f"拉取任务失败：HTTP {resp.status_code} - {resp.text}", err=True)
+            LOGGER.error(f"拉取任务失败：HTTP {resp.status_code} - {resp.text}")
             return
     except Exception as e:
-        click.echo(f"拉取任务失败，网络异常：{e}", err=True)
+        LOGGER.error(f"拉取任务失败，网络异常：{e}")
         return
 
     # 保存 ZIP 到临时文件（直接用名字命名）
     zip_filename = f"{name}_task.zip"
     with open(zip_filename, "wb") as f:
         f.write(resp.content)
-    click.echo(f"任务包下载完成：{zip_filename}")
+    LOGGER.info(f"任务包下载完成：{zip_filename}")
 
     # 自动解压到 WORKSPACE_DIR
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     try:
         with zipfile.ZipFile(zip_filename, "r") as zf:
             zf.extractall(WORKSPACE_DIR)
-        click.echo(f"已解压到目录：{WORKSPACE_DIR}")
+        LOGGER.info(f"已解压到目录：{WORKSPACE_DIR}")
         # 解压成功后询问是否删除原始 ZIP（可选，保留亦可）
         # os.remove(zip_filename)   # 如需清理可取消注释
     except Exception as e:
-        click.echo(f"解压失败：{e}", err=True)
+        LOGGER.error(f"解压失败：{e}")
         return
     
     # 在解压后，获取当前应分配的图片列表
@@ -154,15 +157,15 @@ def pull():
                 base = os.path.splitext(fname)[0]
                 if active_basenames and base not in active_basenames:
                     os.remove(os.path.join(WORKSPACE_DIR, fname))
-                    click.echo(f"已删除失效标注文件：{fname}")
+                    LOGGER.info(f"已删除失效标注文件：{fname}")
 
-    click.echo("提示：请使用 LabelMe 打开 workshop 目录中的图片进行标注，标注后 JSON 文件会自动保存在同一目录。")
+    LOGGER.info("提示：请使用 LabelMe 打开 workshop 目录中的图片进行标注，标注后 JSON 文件会自动保存在同一目录。")
 
 
 def _upload_json(file_path: str, name: str) -> bool:
     """内部函数：上传单个 JSON 文件，返回是否成功"""
     if not os.path.isfile(file_path):
-        click.echo(f"文件不存在：{file_path}", err=True)
+        LOGGER.error(f"文件不存在：{file_path}")
         return False
 
     # 服务器要求上传字段名为 'file'
@@ -173,13 +176,13 @@ def _upload_json(file_path: str, name: str) -> bool:
                 f"{SERVER_URL}/push", params={"name": name}, files=files, timeout=30, verify='server.crt'
             )
             if resp.status_code == 200:
-                click.echo(f"✅ 上传成功：{file_path}")
+                LOGGER.info(f"✅ 上传成功：{file_path}")
                 return True
             else:
-                click.echo(f"❌ 上传失败 {file_path}：HTTP {resp.status_code} - {resp.text}", err=True)
+                LOGGER.error(f"❌ 上传失败 {file_path}：HTTP {resp.status_code} - {resp.text}")
                 return False
         except Exception as e:
-            click.echo(f"❌ 上传异常 {file_path}：{e}", err=True)
+            LOGGER.error(f"❌ 上传异常 {file_path}：{e}")
             return False
 
 
@@ -191,22 +194,22 @@ def push():
         return
 
     if not os.path.isdir(WORKSPACE_DIR):
-        click.echo(f"错误：工作目录 {WORKSPACE_DIR} 不存在，请先运行 pull 下载任务。", err=True)
+        LOGGER.error(f"错误：工作目录 {WORKSPACE_DIR} 不存在，请先运行 pull 下载任务。")
         return
 
     json_files = [f for f in os.listdir(WORKSPACE_DIR) if f.lower().endswith(".json")]
     if not json_files:
-        click.echo(f"在 {WORKSPACE_DIR} 中没有找到任何 .json 文件")
+        LOGGER.info(f"在 {WORKSPACE_DIR} 中没有找到任何 .json 文件")
         return
 
-    click.echo(f"找到 {len(json_files)} 个 JSON 文件，开始上传...")
+    LOGGER.info(f"找到 {len(json_files)} 个 JSON 文件，开始上传...")
     success = 0
     for jf in json_files:
         full_path = os.path.join(WORKSPACE_DIR, jf)
         if _upload_json(full_path, name):
             success += 1
 
-    click.echo(f"上传完成：成功 {success} / 总计 {len(json_files)}")
+    LOGGER.info(f"上传完成：成功 {success} / 总计 {len(json_files)}")
 
 @cli.command()
 def status():
@@ -217,30 +220,30 @@ def status():
     try:
         resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify='server.crt')
         if resp.status_code != 200:
-            click.echo(f"获取状态失败：{resp.text}", err=True)
+            LOGGER.error(f"获取状态失败：{resp.text}")
             return
         data = resp.json()
-        click.echo(f"任务进度：{data['uploaded']}/{data['total']} 已完成，剩余 {data['unuploaded']} 张")
-        click.echo("当前分配图片：")
+        LOGGER.info(f"任务进度：{data['uploaded']}/{data['total']} 已完成，剩余 {data['unuploaded']} 张")
+        LOGGER.info("当前分配图片：")
         for img in data.get('assigned_images', []):
-            click.echo(f"  - {img}")
+            LOGGER.info(f"  - {img}")
     except Exception as e:
-        click.echo(f"请求失败：{e}", err=True)
+        LOGGER.error(f"请求失败：{e}")
         
 @cli.command()
 def clean():
     """删除 workspace 目录及其所有内容（清除本地的图片和标注文件）"""
     if not os.path.exists(WORKSPACE_DIR):
-        click.echo(f"工作目录 {WORKSPACE_DIR} 不存在，无需清理。")
+        LOGGER.info(f"工作目录 {WORKSPACE_DIR} 不存在，无需清理。")
         return
 
     # 交互确认防止误删
     if click.confirm(f"即将删除整个目录 '{WORKSPACE_DIR}'，其中包含的所有图片和标注文件都将丢失。确定要执行吗？"):
         import shutil
         shutil.rmtree(WORKSPACE_DIR)
-        click.echo(f"已删除目录：{WORKSPACE_DIR}")
+        LOGGER.info(f"已删除目录：{WORKSPACE_DIR}")
     else:
-        click.echo("操作已取消。")
+        LOGGER.info("操作已取消。")
 
 @cli.command()
 def update():
@@ -248,15 +251,15 @@ def update():
     # 读取配置中的更新服务器地址
     update_url = config.get("update_server_url")
     if not update_url:
-        click.echo("错误：config.json 中未配置 'update_server_url'", err=True)
+        LOGGER.error("错误：config.json 中未配置 'update_server_url'")
         return
 
-    click.echo(f"正在从 {update_url} 获取更新包...")
+    LOGGER.info(f"正在从 {update_url} 获取更新包...")
     try:
         # 流式下载，避免大文件占用过多内存
         resp = requests.get(update_url, stream=True, timeout=30, verify='server.crt')
         if resp.status_code != 200:
-            click.echo(f"下载失败：HTTP {resp.status_code}", err=True)
+            LOGGER.error(f"下载失败：HTTP {resp.status_code}")
             return
 
         # 保存到临时 ZIP 文件
@@ -271,15 +274,15 @@ def update():
                     bar.update(len(chunk))
 
         # 解压到当前目录（增量覆盖）
-        click.echo("正在解压更新包...")
+        LOGGER.info("正在解压更新包...")
         with zipfile.ZipFile(tmp_zip, 'r') as zf:
             zf.extractall(".")   # 直接解压到当前工作目录（client.exe 所在处）
-        click.echo("更新完成！请重新启动客户端以使更新生效。")
+        LOGGER.info("更新完成！请重新启动客户端以使更新生效。")
 
         # 清理临时文件
         os.remove(tmp_zip)
     except Exception as e:
-        click.echo(f"更新失败：{e}", err=True)
+        LOGGER.error(f"更新失败：{e}")
 
 if __name__ == "__main__":
     cli()

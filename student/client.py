@@ -15,6 +15,8 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
+import sys
+import threading
 
 # ==================== 配置区 ====================
 # 教师服务器的根地址，请根据实际情况修改 IP 和端口
@@ -75,6 +77,46 @@ def setup_logging():
 # 全局 logger 实例
 LOGGER = setup_logging()
 
+def global_exception_handler(exc_type, exc_value, exc_tb):
+    """捕获未处理的异常，自动上传日志并退出"""
+    LOGGER.error("未捕获的异常", exc_info=(exc_type, exc_value, exc_tb))
+    upload_log_async(reason="crash")
+    # 调用默认的异常处理（可选，打印到 stderr）
+    sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+sys.excepthook = global_exception_handler
+
+def upload_log_async(reason="auto"):
+    """异步上传当前日志文件到遥测服务器（不阻塞主程序）"""
+    if not config.get("telemetry_enabled", False):
+        return
+
+    telemetry_url = config.get("telemetry_server_url")
+    if not telemetry_url:
+        return
+
+    log_dir = "./_log"
+    if not os.path.isdir(log_dir):
+        return
+
+    # 获取最新的日志文件
+    log_files = [f for f in os.listdir(log_dir) if f.endswith('.log')]
+    if not log_files:
+        return
+    latest_log = max(log_files, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
+    log_path = os.path.join(log_dir, latest_log)
+
+    def _upload():
+        try:
+            with open(log_path, 'rb') as f:
+                files = {'log_file': (latest_log, f, 'text/plain')}
+                data = {'client_name': get_saved_name() or 'anonymous', 'reason': reason}
+                requests.post(telemetry_url, files=files, data=data, timeout=30, verify=True)
+        except Exception:
+            pass  # 静默失败，避免干扰主流程
+
+    threading.Thread(target=_upload, daemon=True).start()
+
 @click.group()
 def cli():
     """学生端命令行工具 – 用于与教师服务器交互，获取并提交标注任务"""
@@ -119,6 +161,13 @@ def pull():
     except Exception as e:
         LOGGER.error(f"拉取任务失败，网络异常：{e}")
         return
+    
+    # 获取包大小（优先使用 Content-Length，否则用实际内容长度）
+    content_length = resp.headers.get('content-length')
+    zip_content = resp.content
+    actual_size = len(zip_content)
+    size_info = f"{actual_size} bytes" + (f" (Content-Length: {content_length})" if content_length else "")
+    LOGGER.info(f"下载任务包大小：{size_info}")
 
     # 保存 ZIP 到临时文件（直接用名字命名）
     zip_filename = f"{name}_task.zip"

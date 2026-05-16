@@ -17,9 +17,8 @@ pass
 解压后，文件夹应该包含以下内容：
 ```
 ImageLabelTS_sys.client/
-    ImageLabelTS.client.exe
-    server.crt
-    config.json
+    ImageLabelTS.client.exe     # 主程序
+    config.json                 # 配置文件
 ```
 
 **至此，安装完成。**
@@ -43,7 +42,6 @@ ImageLabelTS_sys.client/
 ```cmd
 .\ImageLabelTS.client.exe login <用户名>
 ```
-用户名就是您自己的中文名字。
 
 在登录成功后，您可以看到一个`.annotator_name`文件，该文件记录了您的用户名，以后客户端会自动读取该文件。
 
@@ -79,20 +77,20 @@ ImageLabelTS_sys.client/
 .\ImageLabelTS.client.exe update
 ```
 
-## 4.6 遥测服务（用户体验改进计划）
-通过遥测服务，我们可以获得您的遥测数据，以便我们改进产品。
+## 4.6 诊断和反馈
+通过诊断数据收集服务，我们可以获得您的诊断数据，以便帮助我们改进产品。
 
-遥测服务默认关闭，如需开启，请在`config.json`中将`telemetry_enabled`字段的值设置为`true`。
+诊断数据收集服务默认关闭，如需开启，请在`config.json`中将`telemetry_enabled`字段的值设置为`true`。
 
-当技术支持人员或管理员需要查看您的遥测数据时，您可以通过以下命令主动将遥测数据上传至遥测服务器：
+当技术支持人员或管理员需要查看您的诊断数据时，您可以通过以下命令主动将诊断数据上传至诊断数据收集服务器：
 ```cmd
 .\ImageLabelTS.client.exe upload_log
 ```
-我们尊重您的隐私，您有权利拒绝上传遥测数据。
+我们尊重您的隐私，您有权利拒绝上传诊断数据。
 
-除此之外，若您开启了遥测服务，遥测数据将程序发生未捕获的异常时自动上传。
+除此之外，若您开启了诊断数据收集服务，诊断数据将程序发生未捕获的异常时自动上传。
 
-遥测数据包括以下信息：
+诊断数据包括以下信息：
 - 程序使用日志；
 - 图片分配信息；
 - 执行`pull`与`push`命令所用时间；
@@ -100,4 +98,4 @@ ImageLabelTS_sys.client/
 
 
 以上。
-*<div style="text-align: right;">黄浦巍<br>2026年5月14日</div>*
+*<div style="text-align: right;">黄浦巍<br>2026年5月16日</div>*

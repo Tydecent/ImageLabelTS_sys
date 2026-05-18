@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>ImageLabelTS 预注册</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        /* 装饰性背景圆 */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            top: -100px;
+            left: -100px;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 50%;
+            bottom: -150px;
+            right: -120px;
+            z-index: 0;
+        }
+
+        /* 主卡片容器 */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(2px);
+            border-radius: 2rem;
+            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 480px;
+            padding: 2rem 2rem 2.2rem;
+            transition: transform 0.2s ease;
+            z-index: 2;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+        }
+
+        /* 头部装饰 */
+        .header-icon {
+            text-align: center;
+            margin-bottom: 1.2rem;
+        }
+
+        .header-icon svg {
+            width: 52px;
+            height: 52px;
+            color: #5a67d8;
+            background: rgba(90, 103, 216, 0.12);
+            padding: 10px;
+            border-radius: 30px;
+        }
+
+        h2 {
+            text-align: center;
+            font-weight: 700;
+            font-size: 1.9rem;
+            letter-spacing: -0.3px;
+            background: linear-gradient(120deg, #2d3748, #4a5568);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 0.4rem;
+        }
+
+        .subhead {
+            text-align: center;
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 1.8rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 1rem;
+        }
+
+        /* 表单组 */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            letter-spacing: 0.3px;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            color: #a0aec0;
+            pointer-events: none;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.85rem 1rem 0.85rem 2.8rem;
+            font-size: 1rem;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 1.2rem;
+            background: white;
+            transition: all 0.2s ease;
+            outline: none;
+            font-weight: 500;
+            color: #1a202c;
+        }
+
+        input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
+        }
+
+        /* 按钮 */
+        .register-btn {
+            width: 100%;
+            background: linear-gradient(100deg, #667eea, #764ba2);
+            border: none;
+            padding: 0.9rem;
+            border-radius: 1.8rem;
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.25s;
+            box-shadow: 0 8px 18px rgba(102, 126, 234, 0.3);
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .register-btn:hover {
+            transform: scale(1.02);
+            background: linear-gradient(100deg, #5a67d8, #6b46a0);
+            box-shadow: 0 12px 22px rgba(102, 126, 234, 0.4);
+        }
+
+        .register-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* 消息提示 */
+        .message {
+            margin-top: 1.5rem;
+            padding: 0.9rem;
+            border-radius: 1.2rem;
+            text-align: center;
+            font-weight: 500;
+            display: none;
+            animation: fadeInUp 0.2s ease;
+            backdrop-filter: blur(4px);
+        }
+
+        .success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 5px solid #38a169;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 5px solid #e53e3e;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 响应式微调 */
+        @media (max-width: 500px) {
+            .glass-card {
+                padding: 1.6rem;
+            }
+            h2 {
+                font-size: 1.6rem;
+            }
+            input {
+                padding: 0.75rem 1rem 0.75rem 2.5rem;
+            }
+        }
+
+        /* 密码提示小装饰 */
+        .helper-text {
+            font-size: 0.7rem;
+            color: #718096;
+            margin-top: 0.3rem;
+            margin-left: 0.5rem;
+        }
+        footer {
+            text-align: center;
+            margin-top: 1.8rem;
+            font-size: 0.7rem;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+<div class="glass-card">
+    <div class="header-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+        </svg>
+    </div>
+    <h2>ImageLabelTS 预注册</h2>
+    <div class="subhead">泥嚎</div>
+
+    <form id="registerForm">
+        <div class="form-group">
+            <label>📛 真实姓名</label>
+            <div class="input-wrapper">
+                <span class="input-icon">👤</span>
+                <input type="text" id="name" name="name" placeholder="例：李华" autocomplete="off" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>🔐 密码</label>
+            <div class="input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="password" name="password" placeholder="不要太简单哦" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>✓ 确认密码</label>
+            <div class="input-wrapper">
+                <span class="input-icon">✔️</span>
+                <input type="password" id="confirm_password" name="confirm_password" placeholder="再次输入密码" required>
+            </div>
+            <div class="helper-text">两次密码需完全一致。</div>
+        </div>
+
+        <button type="submit" class="register-btn">
+            <span>✨ 立即注册</span>
+        </button>
+    </form>
+
+    <div id="message" class="message"></div>
+    <footer>泥嚎~</footer>
+</div>
+
+<script>
+    const form = document.getElementById('registerForm');
+    const messageDiv = document.getElementById('message');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        messageDiv.style.display = 'none';
+        messageDiv.className = 'message';
+
+        const name = document.getElementById('name').value.trim();
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm_password').value;
+
+        if (!name) {
+            showMessage('姓名不能为空', 'error');
+            return;
+        }
+        if (!password) {
+            showMessage('密码不能为空', 'error');
+            return;
+        }
+        if (password !== confirmPassword) {
+            showMessage('两次输入的密码不一致', 'error');
+            return;
+        }
+
+        const formData = new FormData(form);
+        try {
+            const response = await fetch('/register', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (result.success) {
+                showMessage(result.message, 'success');
+                form.reset();
+            } else {
+                showMessage(result.message, 'error');
+            }
+        } catch (error) {
+            showMessage('网络错误，请稍后重试', 'error');
+        }
+    });
+
+    function showMessage(msg, type) {
+        messageDiv.textContent = msg;
+        messageDiv.classList.add(type);
+        messageDiv.style.display = 'block';
+        setTimeout(() => {
+            if (messageDiv.style.display === 'block') {
+                messageDiv.style.opacity = '0';
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                    messageDiv.style.opacity = '';
+                    messageDiv.classList.remove(type);
+                }, 300);
+            }
+        }, 3500);
+    }
+</script>
+</body>
+</html>

@@ -16,7 +16,9 @@ import random
 import zipfile
 import io
 from flask import Flask, request, jsonify, send_file, render_template 
-from datetime import datetime
+from datetime import datetime, timedelta
+import bcrypt          # 密码哈希验证
+import secrets         # 生成安全令牌
 
 app = Flask(__name__)
 
@@ -30,20 +32,28 @@ LAST_PUSH_FILE = "last_push_times.json"
 last_push_times = {}    # 格式：{"张三": "2025-04-01T14:35:22", ...}
 
 # 内存中的数据结构
-students = []           # 学生名单列表
+students = {}           # 姓名 -> bcrypt哈希（bytes） {"张三": password_hash_bytes, ...}
 assignments = {}        # 分配字典, 格式: {"张三": ["img1.jpg", ...], ...}
 image_files = []        # 所有有效图片文件名列表
 
+# 添加令牌存储：token -> {"name": 姓名, "expire": datetime}
+tokens = {}             # 内存存储，可配合过期清理
+TOKEN_EXPIRE_HOURS = 8  # 令牌过期时间，单位：小时
+
 # ---------- 辅助函数 ----------
 def load_students():
-    """从名单文件中读取学生姓名，每行一个，去除空行与首尾空格。"""
     global students
     if not os.path.exists(STUDENTS_FILE):
-        print(f"❌ 学生名单文件不存在: {STUDENTS_FILE}")
+        print(f"❌ 学生文件不存在: {STUDENTS_FILE}")
         sys.exit(1)
     with open(STUDENTS_FILE, 'r', encoding='utf-8') as f:
-        students = [line.strip() for line in f if line.strip()]
-    print(f"✅ 已加载 {len(students)} 名学生: {', '.join(students)}")
+        data = json.load(f)          # 格式：[{"name": "张三", "password_hash": "$2b$12..."}, ...]
+    students = {}
+    for item in data:
+        name = item['name']
+        pwd_hash = item['password_hash'].encode('utf-8')   # 存储为字符串，转回bytes
+        students[name] = pwd_hash
+    print(f"✅ 已加载 {len(students)} 名学生 (含密码哈希)")
 
 def load_images():
     """从图片文件夹中获取所有支持的图片文件名。"""
@@ -124,15 +134,46 @@ def save_last_push_times():
     with open(LAST_PUSH_FILE, 'w', encoding='utf-8') as f:
         json.dump(last_push_times, f, ensure_ascii=False, indent=2)
 
+def verify_token(token):
+    """令牌验证辅助函数，返回关联的学生姓名，若无效或过期则返回 None"""
+    info = tokens.get(token)
+    if not info:
+        return None
+    if datetime.now() > info["expire"]:
+        # 过期则删除令牌
+        del tokens[token]
+        return None
+    return info["name"]
+
 # ---------- API 端点 ----------
-@app.route('/login', methods=['GET'])
+@app.route('/login', methods=['POST'])   # 改为 POST，接收 JSON
 def login():
-    """登录检查：姓名是否在名单中，并返回任务数量。"""
-    name = request.args.get('name', '').strip()
-    if not name or name not in assignments:
-        return jsonify({"status": "error", "message": "姓名不在名单中"}), 403
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"status": "error", "message": "需要 JSON 请求体"}), 400
+    name = data.get('name', '').strip()
+    password = data.get('password', '')
+
+    # 验证学生是否存在
+    if name not in students or name not in assignments:
+        return jsonify({"status": "error", "message": "姓名或密码错误"}), 401
+
+    # 验证密码
+    stored_hash = students[name]
+    if not bcrypt.checkpw(password.encode('utf-8'), stored_hash):
+        return jsonify({"status": "error", "message": "姓名或密码错误"}), 401
+
+    # 生成令牌
+    token = secrets.token_urlsafe(32)
+    expire_time = datetime.now() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    tokens[token] = {"name": name, "expire": expire_time}
+
     task_count = len(assignments[name])
-    return jsonify({"status": "ok", "task_count": task_count})
+    return jsonify({
+        "status": "ok",
+        "token": token,
+        "task_count": task_count
+    })
 
 @app.route('/pull', methods=['GET'])
 def pull():
@@ -140,7 +181,15 @@ def pull():
     打包下载：将该学生分配的所有原始图片 + 他已上传的所有 JSON 文件
     打包成 ZIP 返回，ZIP 内部文件平铺在根目录。
     """
-    name = request.args.get('name', '').strip()
+    # 获取令牌
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return "缺少或无效的令牌", 401
+    token = auth_header[7:].strip()
+    name = verify_token(token)
+    if not name:
+        return "令牌无效或已过期", 401
+    
     if not name or name not in assignments:
         return "姓名不在名单中", 403
 
@@ -178,7 +227,15 @@ def push():
     接收学生上传的 JSON 标注文件。
     要求：文件名（不含扩展名）必须与该学生任务中的某张图片（不含扩展名）一致。
     """
-    name = request.args.get('name', '').strip()
+    # 获取令牌
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return "缺少或无效的令牌", 401
+    token = auth_header[7:].strip()
+    name = verify_token(token)
+    if not name:
+        return "令牌无效或已过期", 401
+    
     if not name or name not in assignments:
         return "姓名不在名单中", 403
 
@@ -282,7 +339,15 @@ def status():
     """
     可选端点：返回该学生已上传和未上传的图片数量。
     """
-    name = request.args.get('name', '').strip()
+    # 获取令牌
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return "缺少或无效的令牌", 401
+    token = auth_header[7:].strip()
+    name = verify_token(token)
+    if not name:
+        return "令牌无效或已过期", 401
+    
     if not name or name not in assignments:
         return jsonify({"error": "姓名不在名单中"}), 403
 

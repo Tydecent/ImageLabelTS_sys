@@ -33,19 +33,31 @@ NAME_FILE = ".annotator_name"
 # ===============================================
 
 
-def get_saved_name():
-    """从本地文件中读取已保存的学生姓名"""
-    if not os.path.exists(NAME_FILE):
-        LOGGER.error("错误：尚未登录，请先运行 'client login <姓名>'")
-        return None
-    with open(NAME_FILE, "r", encoding="utf-8") as f:
-        return f.read().strip()
+CREDENTIAL_FILE = ".annotator_credential.json"
 
+def get_saved_credential():
+    """返回 (name, token)，若不存在返回 (None, None)"""
+    if not os.path.exists(CREDENTIAL_FILE):
+        return None, None
+    try:
+        with open(CREDENTIAL_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get('name'), data.get('token')
+    except Exception:
+        return None, None
 
-def save_name(name: str):
-    """将学生姓名保存到本地文件"""
-    with open(NAME_FILE, "w", encoding="utf-8") as f:
-        f.write(name.strip())
+def save_credential(name: str, token: str):
+    """保存姓名和令牌"""
+    with open(CREDENTIAL_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'name': name, 'token': token}, f, indent=2)
+
+def get_authenticated_session():
+    """返回 (name, token)，若未登录或令牌缺失则打印错误并返回 (None, None)"""
+    name, token = get_saved_credential()
+    if not name or not token:
+        LOGGER.error("错误：尚未登录或凭证无效，请先运行 'client login <姓名> <密码>'")
+        return None, None
+    return name, token
 
 def setup_logging():
     """配置日志：同时输出到控制台和文件，文件保存在 ./_log/ 目录下"""
@@ -110,7 +122,7 @@ def upload_log_async(reason="auto"):
         try:
             with open(log_path, 'rb') as f:
                 files = {'log_file': (latest_log, f, 'text/plain')}
-                data = {'client_name': get_saved_name() or 'anonymous', 'reason': reason}
+                data = {'client_name': get_saved_credential()[0]() or 'anonymous', 'reason': reason}
                 requests.post(telemetry_url, files=files, data=data, timeout=30, verify=True)
         except Exception:
             pass  # 静默失败，避免干扰主流程
@@ -125,71 +137,85 @@ def cli():
 
 @cli.command()
 @click.argument("name")
-def login(name):
-    """登录服务器，检查姓名是否在分配名单中，并获取任务数量"""
-    LOGGER.info("登录：姓名：{name}")
+@click.argument("password")      # 直接接收密码作为位置参数
+def login(name, password):
+    """登录服务器，验证姓名和密码，获取访问令牌"""
+    LOGGER.info(f"尝试登录：{name}")
+
+    # 构建请求 JSON
+    payload = {"name": name, "password": password}
+    
     try:
-        resp = requests.get(f"{SERVER_URL}/login", params={"name": name}, timeout=10, verify=True)
+        resp = requests.post(f"{SERVER_URL}/login", json=payload, timeout=10, verify=True)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "ok":
+                token = data.get("token")
                 task_count = data.get("task_count", 0)
-                save_name(name)
+                # 保存凭证（姓名和令牌）
+                save_credential(name, token)
+                # 删除旧的纯文本姓名文件（如果存在）
+                if os.path.exists(".annotator_name"):
+                    os.remove(".annotator_name")
                 LOGGER.info(f"登录成功！姓名：{name}，分配到的图片数量：{task_count}")
             else:
-                LOGGER.error(f"登录失败：服务器返回状态异常 {data}")
+                LOGGER.error(f"登录失败：{data.get('message', '未知错误')}")
         else:
-            LOGGER.error(f"登录失败：HTTP {resp.status_code} - {resp.text}")
+            # 处理 401 等错误
+            try:
+                err_msg = resp.json().get("message", resp.text)
+            except:
+                err_msg = resp.text
+            LOGGER.error(f"登录失败：HTTP {resp.status_code} - {err_msg}")
     except Exception as e:
         LOGGER.error(f"登录失败，网络或服务器错误：{e}")
 
 
 @cli.command()
+@cli.command()
 def pull():
-    """从服务器下载分配给当前学生的任务包（原始图片 + 已上传的 JSON），并自动解压到 workspace 目录"""
     LOGGER.info("开始执行PULL")
-    name = get_saved_name()
+    name, token = get_authenticated_session()
     if not name:
         return
 
+    headers = {'Authorization': f'Bearer {token}'}
+    
     # 请求下载 ZIP 包
     try:
-        resp = requests.get(f"{SERVER_URL}/pull", params={"name": name}, timeout=30, verify=True)
+        resp = requests.get(f"{SERVER_URL}/pull", headers=headers, timeout=30, verify=True)
+        if resp.status_code == 401:
+            LOGGER.error("登录已过期或无效，请重新运行 login")
+            os.remove(CREDENTIAL_FILE)
+            return
         if resp.status_code != 200:
             LOGGER.error(f"拉取任务失败：HTTP {resp.status_code} - {resp.text}")
             return
     except Exception as e:
         LOGGER.error(f"拉取任务失败，网络异常：{e}")
         return
-    
-    # 获取包大小（优先使用 Content-Length，否则用实际内容长度）
-    content_length = resp.headers.get('content-length')
+
+    # 下载 ZIP 内容并解压（原有逻辑不变）
     zip_content = resp.content
     actual_size = len(zip_content)
-    size_info = f"{actual_size} bytes" + (f" (Content-Length: {content_length})" if content_length else "")
-    LOGGER.info(f"下载任务包大小：{size_info}")
-
-    # 保存 ZIP 到临时文件（直接用名字命名）
+    LOGGER.info(f"下载任务包大小：{actual_size} bytes")
     zip_filename = f"{name}_task.zip"
     with open(zip_filename, "wb") as f:
-        f.write(resp.content)
+        f.write(zip_content)
     LOGGER.info(f"任务包下载完成：{zip_filename}")
 
-    # 自动解压到 WORKSPACE_DIR
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     try:
         with zipfile.ZipFile(zip_filename, "r") as zf:
             zf.extractall(WORKSPACE_DIR)
         LOGGER.info(f"已解压到目录：{WORKSPACE_DIR}")
-        # 解压成功后询问是否删除原始 ZIP（可选，保留亦可）
-        # os.remove(zip_filename)   # 如需清理可取消注释
     except Exception as e:
         LOGGER.error(f"解压失败：{e}")
         return
-    
-    # 在解压后，获取当前应分配的图片列表
+
+    # 获取当前分配图片列表，用于清理无效 JSON（同样使用 token）
     try:
-        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify=True)
+        resp = requests.get(f"{SERVER_URL}/status", headers=headers, timeout=10, verify=True)
         if resp.status_code == 200:
             data = resp.json()
             active_images = data.get('assigned_images', [])
@@ -199,7 +225,7 @@ def pull():
     except Exception:
         active_basenames = set()
 
-    # 清理 workshop 中的无效 JSON
+    # 清理无效 JSON
     if os.path.isdir(WORKSPACE_DIR):
         for fname in os.listdir(WORKSPACE_DIR):
             if fname.lower().endswith('.json'):
@@ -208,25 +234,27 @@ def pull():
                     os.remove(os.path.join(WORKSPACE_DIR, fname))
                     LOGGER.info(f"已删除失效标注文件：{fname}")
 
-    LOGGER.info("提示：请使用 LabelMe 打开 workshop 目录中的图片进行标注，标注后 JSON 文件会自动保存在同一目录。")
+    LOGGER.info("提示：请使用 LabelMe 打开 workshop 目录中的图片进行标注...")
 
 
-def _upload_json(file_path: str, name: str) -> bool:
-    """内部函数：上传单个 JSON 文件，返回是否成功"""
+def _upload_json(file_path: str, token: str) -> bool:
     if not os.path.isfile(file_path):
         LOGGER.error(f"文件不存在：{file_path}")
         return False
 
-    # 服务器要求上传字段名为 'file'
     with open(file_path, "rb") as f:
         files = {"file": (os.path.basename(file_path), f, "application/json")}
+        headers = {"Authorization": f"Bearer {token}"}
         try:
             resp = requests.post(
-                f"{SERVER_URL}/push", params={"name": name}, files=files, timeout=30, verify=True
+                f"{SERVER_URL}/push", headers=headers, files=files, timeout=30, verify=True
             )
             if resp.status_code == 200:
                 LOGGER.info(f"✅ 上传成功：{file_path}")
                 return True
+            elif resp.status_code == 401:
+                LOGGER.error("登录已过期，请重新运行 login")
+                return False
             else:
                 LOGGER.error(f"❌ 上传失败 {file_path}：HTTP {resp.status_code} - {resp.text}")
                 return False
@@ -236,9 +264,9 @@ def _upload_json(file_path: str, name: str) -> bool:
 
 
 @cli.command()
+@cli.command()
 def push():
-    """自动上传 workshop 目录下所有的 JSON 标注文件"""
-    name = get_saved_name()
+    name, token = get_authenticated_session()
     if not name:
         return
 
@@ -255,19 +283,24 @@ def push():
     success = 0
     for jf in json_files:
         full_path = os.path.join(WORKSPACE_DIR, jf)
-        if _upload_json(full_path, name):
+        if _upload_json(full_path, token):
             success += 1
 
     LOGGER.info(f"上传完成：成功 {success} / 总计 {len(json_files)}")
 
 @cli.command()
 def status():
-    """查看任务进度及分配图片列表"""
-    name = get_saved_name()
+    name, token = get_authenticated_session()
     if not name:
         return
+
+    headers = {"Authorization": f"Bearer {token}"}
     try:
-        resp = requests.get(f"{SERVER_URL}/status", params={"name": name}, timeout=10, verify=True)
+        resp = requests.get(f"{SERVER_URL}/status", headers=headers, timeout=10, verify=True)
+        if resp.status_code == 401:
+            LOGGER.error("登录已过期，请重新运行 login")
+            os.remove(CREDENTIAL_FILE)
+            return
         if resp.status_code != 200:
             LOGGER.error(f"获取状态失败：{resp.text}")
             return
@@ -366,7 +399,7 @@ def upload_log():
         with open(log_path, 'rb') as f:
             files = {'log_file': (latest_log, f, 'text/plain')}
             # 可选：添加客户端标识（如主机名、用户名等）
-            data = {'client_name': get_saved_name() or 'anonymous'}
+            data = {'client_name': get_saved_credential()[0]() or 'anonymous'}
             resp = requests.post(telemetry_url, files=files, data=data, timeout=30, verify=True)
         if resp.status_code == 200:
             click.echo("日志上传成功")

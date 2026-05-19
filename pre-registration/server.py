@@ -59,5 +59,10 @@ def register():
 
     return jsonify({'success': True, 'message': f'学生 {name} 注册成功！'})
 
+@app.route("/health")
+def health_check():
+    """健康检查端点，用于监控"""
+    return jsonify({'status': 'ok'}), 200
+
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=12016)

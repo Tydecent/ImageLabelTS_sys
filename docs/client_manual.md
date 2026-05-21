@@ -42,6 +42,7 @@ ImageLabelTS_sys.client/
 ```cmd
 .\ImageLabelTS.client.exe login <用户名>
 ```
+该命令会要求您输入密码。输入时密码不可见。
 
 在登录成功后，您可以看到一个`.annotator_name`文件，该文件记录了您的用户名，以后客户端会自动读取该文件。
 

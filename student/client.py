@@ -137,7 +137,7 @@ def cli():
 
 @cli.command()
 @click.argument("name")
-@click.argument("password")      # 直接接收密码作为位置参数
+@click.password_option(prompt="Password", confirmation_prompt=False, hide_input=True)
 def login(name, password):
     """登录服务器，验证姓名和密码，获取访问令牌"""
     LOGGER.info(f"尝试登录：{name}")
@@ -171,7 +171,6 @@ def login(name, password):
         LOGGER.error(f"登录失败，网络或服务器错误：{e}")
 
 
-@cli.command()
 @cli.command()
 def pull():
     LOGGER.info("开始执行PULL")
@@ -263,7 +262,6 @@ def _upload_json(file_path: str, token: str) -> bool:
             return False
 
 
-@cli.command()
 @cli.command()
 def push():
     name, token = get_authenticated_session()

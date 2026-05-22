@@ -1,1 +1,0 @@
-pyinstaller --onefile --name ImageLabelTS.client .\client.py

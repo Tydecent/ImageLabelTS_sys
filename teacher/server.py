@@ -135,13 +135,9 @@ def save_last_push_times():
         json.dump(last_push_times, f, ensure_ascii=False, indent=2)
 
 def verify_token(token):
-    """令牌验证辅助函数，返回关联的学生姓名，若无效或过期则返回 None"""
+    """令牌验证辅助函数，返回关联的学生姓名，若无效则返回 None"""
     info = tokens.get(token)
     if not info:
-        return None
-    if datetime.now() > info["expire"]:
-        # 过期则删除令牌
-        del tokens[token]
         return None
     return info["name"]
 
@@ -153,21 +149,16 @@ def login():
         return jsonify({"status": "error", "message": "需要 JSON 请求体"}), 400
     name = data.get('name', '').strip()
     password = data.get('password', '')
-
     # 验证学生是否存在
     if name not in students or name not in assignments:
         return jsonify({"status": "error", "message": "姓名或密码错误"}), 401
-
     # 验证密码
     stored_hash = students[name]
     if not bcrypt.checkpw(password.encode('utf-8'), stored_hash):
         return jsonify({"status": "error", "message": "姓名或密码错误"}), 401
-
     # 生成令牌
     token = secrets.token_urlsafe(32)
-    expire_time = datetime.now() + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    tokens[token] = {"name": name, "expire": expire_time}
-
+    tokens[token] = {"name": name}
     task_count = len(assignments[name])
     return jsonify({
         "status": "ok",

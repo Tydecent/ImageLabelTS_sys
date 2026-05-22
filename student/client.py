@@ -27,13 +27,8 @@ with open('config.json', 'r', encoding='utf-8') as config_file:
 
 # 本地工作目录（存放解压后的图片和 JSON 文件）
 WORKSPACE_DIR = "./workshop"
-
-# 本地存储学生姓名的隐藏文件
-NAME_FILE = ".annotator_name"
-# ===============================================
-
-
 CREDENTIAL_FILE = ".annotator_credential.json"
+# ===============================================
 
 def get_saved_credential():
     """返回 (name, token)，若不存在返回 (None, None)"""

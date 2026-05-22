@@ -205,7 +205,7 @@ def pull():
 
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     try:
-        with zipfile.ZipFile(zip_filename, "r") as zf:
+        with zipfile.ZipFile(zip_filename, "r", compression=zipfile.ZIP_LZMA) as zf:
             zf.extractall(WORKSPACE_DIR)
         LOGGER.info(f"已解压到目录：{WORKSPACE_DIR}")
     except Exception as e:

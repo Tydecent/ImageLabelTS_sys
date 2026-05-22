@@ -191,7 +191,7 @@ def pull():
 
     # 创建内存 ZIP 文件
     zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_LZMA) as zf:
         # 1. 添加分配的原始图片（从 IMAGE_DIR 读取）
         for img_filename in assignments[name]:
             img_path = os.path.join(IMAGE_DIR, img_filename)

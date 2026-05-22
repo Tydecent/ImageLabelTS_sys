@@ -156,7 +156,12 @@ def login():
     stored_hash = students[name]
     if not bcrypt.checkpw(password.encode('utf-8'), stored_hash):
         return jsonify({"status": "error", "message": "姓名或密码错误"}), 401
-    # 生成令牌
+    # 吊销该用户所有旧令牌
+    old_tokens = [t for t, info in tokens.items() if info["name"] == name]
+    for t in old_tokens:
+        del tokens[t]
+    
+    # 生成新令牌
     token = secrets.token_urlsafe(32)
     tokens[token] = {"name": name}
     task_count = len(assignments[name])

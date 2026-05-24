@@ -17,6 +17,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import sys
 import threading
+import hashlib
 
 # ==================== 配置区 ====================
 # 教师服务器的根地址，请根据实际情况修改 IP 和端口
@@ -53,6 +54,14 @@ def get_authenticated_session():
         LOGGER.error("错误：尚未登录或凭证无效，请先运行 'client login <姓名> <密码>'")
         return None, None
     return name, token
+
+def compute_file_hash(filepath):
+    """计算文件的 MD5 哈希值"""
+    hash_md5 = hashlib.md5()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
 
 def setup_logging():
     """配置日志：同时输出到控制台和文件，文件保存在 ./_log/ 目录下"""
@@ -256,7 +265,6 @@ def _upload_json(file_path: str, token: str) -> bool:
             LOGGER.error(f"❌ 上传异常 {file_path}：{e}")
             return False
 
-
 @cli.command()
 def push():
     name, token = get_authenticated_session()
@@ -267,19 +275,53 @@ def push():
         LOGGER.error(f"错误：工作目录 {WORKSPACE_DIR} 不存在，请先运行 pull 下载任务。")
         return
 
+    # 1. 获取服务端状态（含哈希信息）
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        resp = requests.get(f"{SERVER_URL}/status", headers=headers, timeout=10, verify=True)
+        if resp.status_code == 401:
+            LOGGER.error("登录已过期，请重新运行 login")
+            os.remove(CREDENTIAL_FILE)
+            return
+        if resp.status_code != 200:
+            LOGGER.error(f"获取状态失败：{resp.text}")
+            return
+        status_data = resp.json()
+        uploaded_details = status_data.get("uploaded_details", {})   # {"cat": {"hash": "xxx", ...}, ...}
+    except Exception as e:
+        LOGGER.error(f"获取状态失败，将采用全量上传：{e}")
+        uploaded_details = {}   # 降级：全量上传
+
+    # 2. 收集所有 JSON 文件
     json_files = [f for f in os.listdir(WORKSPACE_DIR) if f.lower().endswith(".json")]
     if not json_files:
         LOGGER.info(f"在 {WORKSPACE_DIR} 中没有找到任何 .json 文件")
         return
 
-    LOGGER.info(f"找到 {len(json_files)} 个 JSON 文件，开始上传...")
+    LOGGER.info(f"找到 {len(json_files)} 个 JSON 文件，开始增量上传...")
     success = 0
     for jf in json_files:
         full_path = os.path.join(WORKSPACE_DIR, jf)
-        if _upload_json(full_path, token):
-            success += 1
+        base_name = os.path.splitext(jf)[0]   # 文件名不含扩展名
+        
+        # 判断是否需要上传
+        need_upload = False
+        if base_name not in uploaded_details:
+            need_upload = True   # 服务端没有此文件记录
+        else:
+            # 计算本地哈希
+            local_hash = compute_file_hash(full_path)
+            remote_hash = uploaded_details[base_name].get("hash")
+            if local_hash != remote_hash:
+                need_upload = True   # 内容已变更
+            else:
+                LOGGER.info(f"跳过未修改文件：{jf}")
+        
+        if need_upload:
+            if _upload_json(full_path, token):
+                success += 1
 
-    LOGGER.info(f"上传完成：成功 {success} / 总计 {len(json_files)}")
+    LOGGER.info(f"上传完成：成功 {success} / 需上传 {len([jf for jf in json_files if (os.path.splitext(jf)[0] not in uploaded_details or compute_file_hash(os.path.join(WORKSPACE_DIR, jf)) != uploaded_details.get(os.path.splitext(jf)[0], {}).get('hash'))])} (总计 {len(json_files)})")
 
 @cli.command()
 def status():

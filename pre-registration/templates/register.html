@@ -319,8 +319,7 @@
             });
             const result = await response.json();
             if (result.success) {
-                showMessage(result.message, 'success');
-                form.reset();
+                window.location.href = '/success';
             } else {
                 showMessage(result.message, 'error');
             }

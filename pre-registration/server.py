@@ -59,6 +59,10 @@ def register():
 
     return jsonify({'success': True, 'message': f'学生 {name} 注册成功！'})
 
+@app.route('/success')
+def success_page():
+    return render_template('success.html')
+
 @app.route("/health")
 def health_check():
     """健康检查端点，用于监控"""

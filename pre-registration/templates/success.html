@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册成功</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;  /* 纯黑背景，也可以改成 #fff 或透明 */
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        img {
+            max-width: 100vw;
+            max-height: 100vh;
+            object-fit: contain;
+            /* 初始完全透明，等待加载完成后再显示 */
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+    </style>
+</head>
+<body>
+    <img id="successImage" 
+         src="https://cdn.kodo.tydecent.top/201-Created.jpg" 
+         alt="">
+    <script>
+        const img = document.getElementById('successImage');
+        img.onload = function() {
+            // 图片完全加载后，渐显或直接显示
+            img.style.opacity = '1';
+        };
+        // 如果图片加载失败，可静默失败或显示简单占位（不显示文字）
+        img.onerror = function() {
+            // 可选：留空或显示一个错误图标（纯视觉，不加文字）
+            console.warn('Image load failed');
+        };
+    </script>
+</body>
+</html>

@@ -15,8 +15,6 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
-import sys
-import threading
 import hashlib
 
 # ==================== 配置区 ====================

@@ -93,46 +93,6 @@ def setup_logging():
 # 全局 logger 实例
 LOGGER = setup_logging()
 
-def global_exception_handler(exc_type, exc_value, exc_tb):
-    """捕获未处理的异常，自动上传日志并退出"""
-    LOGGER.error("未捕获的异常", exc_info=(exc_type, exc_value, exc_tb))
-    upload_log_async(reason="crash")
-    # 调用默认的异常处理（可选，打印到 stderr）
-    sys.__excepthook__(exc_type, exc_value, exc_tb)
-
-sys.excepthook = global_exception_handler
-
-def upload_log_async(reason="auto"):
-    """异步上传当前日志文件到遥测服务器（不阻塞主程序）"""
-    if not config.get("telemetry_enabled", False):
-        return
-
-    telemetry_url = config.get("telemetry_server_url")
-    if not telemetry_url:
-        return
-
-    log_dir = "./_log"
-    if not os.path.isdir(log_dir):
-        return
-
-    # 获取最新的日志文件
-    log_files = [f for f in os.listdir(log_dir) if f.endswith('.log')]
-    if not log_files:
-        return
-    latest_log = max(log_files, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
-    log_path = os.path.join(log_dir, latest_log)
-
-    def _upload():
-        try:
-            with open(log_path, 'rb') as f:
-                files = {'log_file': (latest_log, f, 'text/plain')}
-                data = {'client_name': get_saved_credential()[0]() or 'anonymous', 'reason': reason}
-                requests.post(telemetry_url, files=files, data=data, timeout=30, verify=True)
-        except Exception:
-            pass  # 静默失败，避免干扰主流程
-
-    threading.Thread(target=_upload, daemon=True).start()
-
 @click.group()
 def cli():
     """学生端命令行工具 – 用于与教师服务器交互，获取并提交标注任务"""

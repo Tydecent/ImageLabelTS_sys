@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  annotation-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: annotation-server
+    restart: unless-stopped
+    ports:
+      - "12010:12010"
+    volumes:
+      # 挂载数据目录：图片、标注、数据库均持久化到宿主机
+      - ./data:/data
+    environment:
+      # ── 必填：修改为强随机字符串 ──
+      JWT_SECRET: "change-me-to-a-very-long-random-secret"
+      # ── 数据目录与数据库路径 ──
+      DATA_DIR: /data
+      DATABASE_URL: "sqlite+aiosqlite:////data/app.db"
+      # ── 可选：教师端 API Key，留空则不校验 ──
+      TEACHER_API_KEY: ""
+      # ── JWT 过期时间（小时） ──
+      JWT_EXPIRE_HOURS: "8"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

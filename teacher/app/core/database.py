@@ -45,8 +45,11 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
-    """初始化数据库，创建所有表"""
+    """
+    初始化数据库，创建所有表。
+    """
     # 延迟导入以避免循环依赖
     from app.models import student, image, assignment, annotation  # noqa: F401
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        for table in Base.metadata.sorted_tables:
+            await conn.run_sync(table.create, checkfirst=True)

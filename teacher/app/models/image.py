@@ -12,7 +12,8 @@ class Image(Base):
     __tablename__ = "images"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    filename: Mapped[str] = mapped_column(String(256), unique=True, nullable=False, index=True)
+    # 不加 index=True，避免与 __table_args__ 中的 Index 重复定义
+    filename: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
     original_path: Mapped[str] = mapped_column(String(512), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, default=0)
     uploaded_at: Mapped[datetime] = mapped_column(

@@ -102,10 +102,17 @@ async def pull(
     filename = f"{student.name}_task.zip"
     logger.info("学生 %s 拉取任务包，图片数 %d", student.name, len(image_paths))
 
+    # HTTP 响应头仅允许 latin-1 字符；含中文文件名须按 RFC 5987 做 URL 编码
+    from urllib.parse import quote
+    encoded_filename = quote(filename, safe="")
+    content_disposition = (
+        f"attachment; filename=\"task.zip\"; filename*=UTF-8''{encoded_filename}"
+    )
+
     return StreamingResponse(
         build_task_zip(image_paths, annotation_paths),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition},
     )
 
 

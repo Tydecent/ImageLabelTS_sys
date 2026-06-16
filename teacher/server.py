@@ -24,6 +24,7 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
 from functools import wraps
 from psycopg2.errors import SerializationFailure
+import psycopg2.extensions
 import uuid
 
 # ---------------------------------------------------------------------------
@@ -276,26 +277,35 @@ def create_app():
     @retry_on_serialization(max_retries=3)
     def pull():
         student = g.student_name
-        cur = g.db_conn.cursor()
+        conn = g.db_conn
 
-        # 显式开始可重复读事务
-        cur.execute("BEGIN;")
-        cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;")
+        # 清除任何残留事务，确保连接处于空闲状态
+        conn.rollback()
+        # 设置事务隔离级别为 REPEATABLE READ（必须在事务外执行）
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
+        cur = conn.cursor()
+
         try:
+            # 1. 查询分配图片列表
             cur.execute("SELECT image_filename FROM assignments WHERE name = %s;", (student,))
             assignments = [row["image_filename"] for row in cur.fetchall()]
             if not assignments:
-                g.db_conn.rollback()
+                conn.rollback()
                 abort(404, description="该学生暂无分配图片")
 
+            # 2. 查询已上传的标注文件基名
             cur.execute("SELECT image_basename FROM uploads WHERE name = %s;", (student,))
             uploaded_set = {row["image_basename"] for row in cur.fetchall()}
-            g.db_conn.commit()   # 只读事务提交释放快照
+            conn.commit()   # 只读事务提交，释放快照
         except Exception:
-            g.db_conn.rollback()
+            conn.rollback()
             raise
+        finally:
+            # 恢复默认隔离级别（若连接会被复用），避免影响后续请求
+            # 若每个请求使用独立连接，可省略此步骤
+            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
 
-        # 内存打包（无数据库操作）
+        # 3. 内存打包（无数据库操作）
         buffer = BytesIO()
         with ZipFile(buffer, "w", ZIP_DEFLATED) as zf:
             for img_filename in assignments:
@@ -356,12 +366,11 @@ def create_app():
         student_dir = UPLOADS_DIR / student
         student_dir.mkdir(parents=True, exist_ok=True)
 
-        # 生成临时文件路径（锁外生成）
         tmp_path = student_dir / f".tmp_{safe_basename}_{uuid.uuid4().hex}.json"
         target_path = student_dir / f"{safe_basename}.json"
         lock_path = student_dir / f"{safe_basename}.lock"
 
-        # 1. 写入临时文件并强制落盘（锁外）
+        # 1. 写入临时文件（锁外）
         try:
             with open(tmp_path, "wb") as tmp_f:
                 tmp_f.write(file_content)
@@ -372,50 +381,50 @@ def create_app():
                 tmp_path.unlink()
             abort(500, description=f"临时文件写入失败: {e}")
 
-        # 2. 获取文件锁，保护替换与数据库提交的原子性
+        # 2. 获取文件锁
         with open(lock_path, "w") as lock_fd:
             fcntl.lockf(lock_fd, fcntl.LOCK_EX)
             try:
-                # 缓存旧文件内容（用于数据库失败时的回滚）
                 old_content = None
                 if target_path.exists():
                     with open(target_path, "rb") as f:
                         old_content = f.read()
 
-                # 在锁内再次验证任务归属（防止锁外状态变更）
+                # 在锁内再次验证任务归属
                 cur = g.db_conn.cursor()
                 cur.execute(
                     "SELECT 1 FROM assignments WHERE name = %s AND image_filename LIKE %s;",
                     (student, f"{safe_basename}.%")
                 )
                 if cur.fetchone() is None:
-                    # 清理临时文件，释放锁并报错
                     if tmp_path.exists():
                         tmp_path.unlink()
                     abort(403, description=f"文件名 '{safe_basename}' 与该学生任务不匹配")
 
-                # 3. 原子替换目标文件（此时磁盘已为最新）
+                # 3. 原子替换目标文件
                 try:
                     os.replace(tmp_path, target_path)
                 except Exception as replace_err:
-                    # 替换失败，清理临时文件，直接报错（数据库未修改，安全）
                     if tmp_path.exists():
                         tmp_path.unlink()
                     abort(500, description=f"文件替换失败: {replace_err}")
 
-                # 4. 更新数据库（在替换成功后进行）
+                # 4. 数据库操作（先清除残留事务，设置隔离级别）
+                conn = g.db_conn
+                conn.rollback()  # 清除可能残留的事务
+                conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
                 try:
-                    cur.execute("BEGIN;")
-                    cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;")
+                    cur = conn.cursor()  # 重新获取游标（或继续使用已有，但确保隔离级别已设置）
+                    # 直接执行插入（无需显式 BEGIN，因为隔离级别已设置，且 autocommit=False）
                     cur.execute("""
                         INSERT INTO uploads (name, image_basename, hash, last_upload)
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT (name, image_basename)
                         DO UPDATE SET hash = EXCLUDED.hash, last_upload = EXCLUDED.last_upload;
                     """, (student, safe_basename, file_hash, datetime.now(timezone.utc)))
-                    g.db_conn.commit()
+                    conn.commit()
                 except Exception as db_err:
-                    g.db_conn.rollback()
+                    conn.rollback()
                     # 数据库失败，回滚文件到旧状态
                     if old_content is not None:
                         with open(target_path, "wb") as f:
@@ -423,15 +432,14 @@ def create_app():
                     else:
                         if target_path.exists():
                             target_path.unlink()
-                    # 清理临时文件（如果还在，但通常已被替换）
                     if tmp_path.exists():
                         tmp_path.unlink()
-                    # 重新抛出异常，由装饰器或上层处理
                     raise
+                finally:
+                    # 恢复默认隔离级别
+                    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
 
-                # 全部成功，临时文件已被替换，无需额外清理
             except Exception:
-                # 确保任何异常下临时文件被清理
                 if tmp_path.exists():
                     tmp_path.unlink()
                 raise
@@ -447,10 +455,12 @@ def create_app():
     @login_required
     def status():
         student = g.student_name
-        cur = g.db_conn.cursor()
+        conn = g.db_conn
 
-        cur.execute("BEGIN;")
-        cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;")
+        conn.rollback()
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
+        cur = conn.cursor()
+
         try:
             cur.execute("SELECT image_filename FROM assignments WHERE name = %s;", (student,))
             assigned_rows = cur.fetchall()
@@ -458,10 +468,12 @@ def create_app():
 
             cur.execute("SELECT image_basename, hash, last_upload FROM uploads WHERE name = %s;", (student,))
             upload_rows = cur.fetchall()
-            g.db_conn.commit()
+            conn.commit()
         except Exception:
-            g.db_conn.rollback()
+            conn.rollback()
             raise
+        finally:
+            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
 
         uploaded_map = {r["image_basename"]: r for r in upload_rows}
         uploaded_count = 0
@@ -494,10 +506,12 @@ def create_app():
     # -----------------------------------------------------------------------
     @app.route("/api/overview", methods=["GET"])
     def overview():
-        cur = g.db_conn.cursor()
+        conn = g.db_conn
 
-        cur.execute("BEGIN;")
-        cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;")
+        conn.rollback()
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
+        cur = conn.cursor()
+
         try:
             cur.execute("SELECT name FROM students;")
             all_students = [row["name"] for row in cur.fetchall()]
@@ -535,10 +549,13 @@ def create_app():
                     "uploaded_images": uploaded_basenames,
                     "last_push": last_push.isoformat() if isinstance(last_push, datetime) else None,
                 })
-            g.db_conn.commit()
+
+            conn.commit()
         except Exception:
-            g.db_conn.rollback()
+            conn.rollback()
             raise
+        finally:
+            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
 
         return jsonify({
             "students": result_students,

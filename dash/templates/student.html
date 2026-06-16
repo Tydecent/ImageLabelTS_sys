@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>标注员面板</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .logout { color: #007bff; text-decoration: none; }
+        .stats { display: flex; gap: 30px; margin: 20px 0; }
+        .stat-item { background: #e9ecef; padding: 15px 25px; border-radius: 6px; }
+        .stat-label { font-weight: bold; color: #555; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #f2f2f2; }
+        .badge { background: #28a745; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .loading { text-align: center; padding: 20px; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>标注员面板 - {{ username }}</h2>
+            <a href="/logout" class="logout">退出登录</a>
+        </div>
+        <div id="content">
+            <div class="loading">加载数据中...</div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/data');
+                if (!res.ok) throw new Error('Network response was not ok');
+                const data = await res.json();
+                renderStudent(data);
+            } catch (err) {
+                document.getElementById('content').innerHTML = `<div class="error">数据加载失败: ${err.message}</div>`;
+            }
+        }
+
+        function renderStudent(data) {
+            const me = data.students && data.students.length > 0 ? data.students[0] : null;
+            const totalOverall = data.total_overall || { total: 0, uploaded: 0 };
+
+            let html = `
+                <div class="stats">
+                    <div class="stat-item"><span class="stat-label">我的总图数</span><br><span class="stat-value">${me ? me.total : 0}</span></div>
+                    <div class="stat-item"><span class="stat-label">我已上传</span><br><span class="stat-value">${me ? me.uploaded : 0}</span></div>
+                    <div class="stat-item"><span class="stat-label">整体总图数</span><br><span class="stat-value">${totalOverall.total}</span></div>
+                    <div class="stat-item"><span class="stat-label">整体已上传</span><br><span class="stat-value">${totalOverall.uploaded}</span></div>
+                </div>
+                <h3>我的分配列表</h3>
+            `;
+
+            if (me && me.images && me.images.length > 0) {
+                html += `<table>
+                    <tr><th>图片文件名</th><th>状态</th><th>最后上传时间</th></tr>`;
+                me.images.forEach(img => {
+                    const base = img.replace(/\.[^/.]+$/, ""); // 去掉扩展名
+                    const uploaded = me.uploaded_images && me.uploaded_images.includes(base);
+                    const lastPush = me.last_push ? new Date(me.last_push).toLocaleString() : '-';
+                    html += `<tr>
+                        <td>${img}</td>
+                        <td>${uploaded ? '<span class="badge">已上传</span>' : '未上传'}</td>
+                        <td>${uploaded ? lastPush : '-'}</td>
+                    </tr>`;
+                });
+                html += `</table>`;
+            } else {
+                html += `<p>暂无分配的图片。</p>`;
+            }
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        fetchData();
+    </script>
+</body>
+</html>

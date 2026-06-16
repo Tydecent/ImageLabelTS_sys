@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员面板</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .logout { color: #007bff; text-decoration: none; }
+        .stats { display: flex; gap: 30px; margin: 20px 0; }
+        .stat-item { background: #e9ecef; padding: 15px 25px; border-radius: 6px; }
+        .stat-label { font-weight: bold; color: #555; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f2f2f2; }
+        .badge { background: #28a745; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .loading { text-align: center; padding: 20px; }
+        .error { color: red; }
+        .detail-toggle { cursor: pointer; color: #007bff; text-decoration: underline; }
+        .detail-row { display: none; background: #f9f9f9; }
+        .detail-row td { padding: 10px 20px; }
+        .detail-list { margin: 0; padding-left: 20px; }
+        .detail-list li { list-style: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>管理员面板 - {{ username }}</h2>
+            <a href="/logout" class="logout">退出登录</a>
+        </div>
+        <div id="content">
+            <div class="loading">加载数据中...</div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/data');
+                if (!res.ok) throw new Error('Network response was not ok');
+                const data = await res.json();
+                renderAdmin(data);
+            } catch (err) {
+                document.getElementById('content').innerHTML = `<div class="error">数据加载失败: ${err.message}</div>`;
+            }
+        }
+
+        function renderAdmin(data) {
+            const students = data.students || [];
+            const totalOverall = data.total_overall || { total: 0, uploaded: 0 };
+
+            let html = `
+                <div class="stats">
+                    <div class="stat-item"><span class="stat-label">总学生数</span><br><span class="stat-value">${students.length}</span></div>
+                    <div class="stat-item"><span class="stat-label">总图数</span><br><span class="stat-value">${totalOverall.total}</span></div>
+                    <div class="stat-item"><span class="stat-label">总已上传</span><br><span class="stat-value">${totalOverall.uploaded}</span></div>
+                </div>
+                <h3>所有学生进度</h3>
+                <table>
+                    <tr>
+                        <th>姓名</th>
+                        <th>总图数</th>
+                        <th>已上传</th>
+                        <th>最后上传时间</th>
+                        <th>详情</th>
+                    </tr>
+            `;
+
+            students.forEach((stu, idx) => {
+                const lastPush = stu.last_push ? new Date(stu.last_push).toLocaleString() : '-';
+                html += `
+                    <tr>
+                        <td>${stu.name}</td>
+                        <td>${stu.total}</td>
+                        <td>${stu.uploaded}</td>
+                        <td>${lastPush}</td>
+                        <td><span class="detail-toggle" onclick="toggleDetail(${idx})">查看详情</span></td>
+                    </tr>
+                    <tr id="detail-${idx}" class="detail-row">
+                        <td colspan="5">
+                            <strong>分配的图片：</strong>
+                            <ul class="detail-list">
+                                ${stu.images && stu.images.length ? stu.images.map(img => {
+                                    const base = img.replace(/\.[^/.]+$/, "");
+                                    const uploaded = stu.uploaded_images && stu.uploaded_images.includes(base);
+                                    return `<li>${img} ${uploaded ? '✅' : '❌'}</li>`;
+                                }).join('') : '<li>无</li>'}
+                            </ul>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `</table>`;
+            document.getElementById('content').innerHTML = html;
+        }
+
+        function toggleDetail(idx) {
+            const row = document.getElementById(`detail-${idx}`);
+            if (row.style.display === 'table-row') {
+                row.style.display = 'none';
+            } else {
+                row.style.display = 'table-row';
+            }
+        }
+
+        fetchData();
+    </script>
+</body>
+</html>

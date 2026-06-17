@@ -44,7 +44,6 @@
             UserName_Label.Size = new Size(64, 24);
             UserName_Label.TabIndex = 0;
             UserName_Label.Text = "用户名";
-            UserName_Label.Click += UserName_Label_Click;
             // 
             // Password_Label
             // 
@@ -88,6 +87,7 @@
             Login_Button.TabIndex = 5;
             Login_Button.Text = "登录";
             Login_Button.UseVisualStyleBackColor = true;
+            Login_Button.Click += Login_Button_Click;
             // 
             // Login_Form
             // 

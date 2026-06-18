@@ -13,6 +13,7 @@ app = Flask(__name__)
 
 # 配置文件路径（与脚本同目录下的 update_package.zip）
 ZIP_FILE_PATH = os.path.join(os.path.dirname(__file__), "update_package.zip")
+SCRIPT_FILE_PATH = os.path.join(os.path.dirname(__file__), "update.ps1")
 
 @app.route('/download', methods=['GET'])
 def download_update():
@@ -26,6 +27,19 @@ def download_update():
         mimetype='application/zip',
         as_attachment=True,
         download_name='client_update.zip'   # 客户端看到的文件名，可随意
+    )
+
+@app.route('/download/update_script', methods=['GET'])
+def update_script():
+    """客户端调用此接口下载升级脚本"""
+    if not os.path.exists(SCRIPT_FILE_PATH):
+        abort(404, description="更新脚本不存在，请联系管理员")
+    
+    return send_file(
+        ZIP_FILE_PATH,
+        mimetype='application/ps1',
+        as_attachment=True,
+        download_name='update.ps1'   # 客户端看到的文件名
     )
 
 @app.route('/health', methods=['GET'])

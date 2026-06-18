@@ -36,7 +36,7 @@ def update_script():
         abort(404, description="更新脚本不存在，请联系管理员")
     
     return send_file(
-        ZIP_FILE_PATH,
+        SCRIPT_FILE_PATH,
         mimetype='application/ps1',
         as_attachment=True,
         download_name='update.ps1'   # 客户端看到的文件名

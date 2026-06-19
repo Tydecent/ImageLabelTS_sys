@@ -441,7 +441,6 @@ namespace student
             }
         }
 
-        // 更新
         private async void Update_toolStripMenuItem_Click(object sender, EventArgs e)
         {
             try
@@ -455,7 +454,6 @@ namespace student
                 }
 
                 string jsonContent = File.ReadAllText(configPath);
-                // 使用 System.Text.Json 解析 JSON
                 using JsonDocument doc = JsonDocument.Parse(jsonContent);
                 JsonElement root = doc.RootElement;
                 if (!root.TryGetProperty("update_server_url", out JsonElement urlElement))
@@ -470,62 +468,47 @@ namespace student
                     return;
                 }
 
-                // 2. 流式下载更新包到临时 ZIP 文件
+                // 2. 构建脚本下载 URL 与保存路径
+                string scriptUrl = updateUrl.TrimEnd('/') + "/update_script";
+                string appDir = AppDomain.CurrentDomain.BaseDirectory;
+                string zipPath = Path.Combine(appDir, "update.zip");
+                string scriptPath = Path.Combine(appDir, "update.ps1");
+
+                // 3. 并行下载更新包与脚本
                 using HttpClient client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(30);
-                // 发送 GET 请求，只读取响应头以便获取 Content-Length
-                HttpResponseMessage response = await client.GetAsync(updateUrl, HttpCompletionOption.ResponseHeadersRead);
-                if (!response.IsSuccessStatusCode)
+                client.Timeout = TimeSpan.FromMinutes(5);
+
+                Task downloadZip = DownloadFileAsync(client, updateUrl, zipPath);
+                Task downloadScript = DownloadFileAsync(client, scriptUrl, scriptPath);
+                await Task.WhenAll(downloadZip, downloadScript);
+
+                // 4. 启动更新脚本并立即退出应用
+                ProcessStartInfo psi = new ProcessStartInfo
                 {
-                    MessageBox.Show($"下载失败：HTTP {response.StatusCode}", "更新失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
+                    FileName = "powershell.exe",
+                    Arguments = $"-ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                    UseShellExecute = true,
+                    WorkingDirectory = appDir
+                };
+                Process.Start(psi);
 
-                long? totalBytes = response.Content.Headers.ContentLength;
-                string tempZip = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".zip");
-
-                // 下载并写入临时文件，同时报告进度（此处输出到调试输出，也可更新 UI 进度条）
-                using (FileStream fileStream = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None))
-                using (Stream contentStream = await response.Content.ReadAsStreamAsync())
-                {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    long totalRead = 0;
-                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                    {
-                        await fileStream.WriteAsync(buffer, 0, bytesRead);
-                        totalRead += bytesRead;
-
-                        // 如果有总大小，计算并显示进度（此处仅输出调试信息，实际可更新 ProgressBar）
-                        if (totalBytes.HasValue && totalBytes.Value > 0)
-                        {
-                            int percent = (int)((double)totalRead / totalBytes.Value * 100);
-                            Debug.WriteLine($"下载进度：{percent}% ({totalRead}/{totalBytes.Value})");
-                            // 如果需要更新 UI 进度条，可在此使用 Invoke 操作控件
-                            // this.Invoke((Action)(() => { progressBar.Value = percent; }));
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"已下载：{totalRead} 字节");
-                        }
-                    }
-                }
-
-                // 3. 解压到当前目录（增量覆盖）
-                //    使用 ZipFile.ExtractToDirectory 并指定 overwriteFiles: true
-                ZipFile.ExtractToDirectory(tempZip, ".", true);
-
-                MessageBox.Show("更新完成！请重新启动客户端以使更新生效。", "更新成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                // 4. 清理临时文件
-                File.Delete(tempZip);
+                Environment.Exit(0);
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"更新失败：{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                // 若临时文件存在，尝试删除
-                // 注意：可能未定义 tempZip 变量，需在外部声明并捕获，此处略
             }
+        }
+
+        // 辅助方法：流式下载文件到指定路径
+        private async Task DownloadFileAsync(HttpClient client, string url, string destinationPath)
+        {
+            using HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+
+            using FileStream fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            using Stream contentStream = await response.Content.ReadAsStreamAsync();
+            await contentStream.CopyToAsync(fileStream);
         }
     }
 }

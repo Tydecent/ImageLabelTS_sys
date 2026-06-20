@@ -32,7 +32,6 @@
             StatusStrip = new StatusStrip();
             JiuXu_Label = new ToolStripStatusLabel();
             toolStripProgressBar = new ToolStripProgressBar();
-            toolStripStatusLabel1 = new ToolStripStatusLabel();
             Status_GroupBox = new GroupBox();
             Login_Button = new Button();
             TaskProgress_Label = new Label();
@@ -62,7 +61,7 @@
             // StatusStrip
             // 
             StatusStrip.ImageScalingSize = new Size(24, 24);
-            StatusStrip.Items.AddRange(new ToolStripItem[] { JiuXu_Label, toolStripProgressBar, toolStripStatusLabel1 });
+            StatusStrip.Items.AddRange(new ToolStripItem[] { JiuXu_Label, toolStripProgressBar });
             StatusStrip.Location = new Point(0, 774);
             StatusStrip.Name = "StatusStrip";
             StatusStrip.Size = new Size(759, 31);
@@ -79,13 +78,6 @@
             // 
             toolStripProgressBar.Name = "toolStripProgressBar";
             toolStripProgressBar.Size = new Size(100, 23);
-            // 
-            // toolStripStatusLabel1
-            // 
-            toolStripStatusLabel1.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Italic, GraphicsUnit.Point, 134);
-            toolStripStatusLabel1.Name = "toolStripStatusLabel1";
-            toolStripStatusLabel1.Size = new Size(226, 24);
-            toolStripStatusLabel1.Text = "开发版本 - 不代表最终品质";
             // 
             // Status_GroupBox
             // 
@@ -168,10 +160,15 @@
             // 
             // Details_dataGridView
             // 
+            Details_dataGridView.AllowUserToAddRows = false;
+            Details_dataGridView.AllowUserToDeleteRows = false;
+            Details_dataGridView.AllowUserToResizeColumns = false;
+            Details_dataGridView.AllowUserToResizeRows = false;
             Details_dataGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             Details_dataGridView.Columns.AddRange(new DataGridViewColumn[] { Column1, Column2, Column3 });
             Details_dataGridView.Location = new Point(19, 427);
             Details_dataGridView.Name = "Details_dataGridView";
+            Details_dataGridView.ReadOnly = true;
             Details_dataGridView.RowHeadersWidth = 62;
             Details_dataGridView.Size = new Size(707, 282);
             Details_dataGridView.TabIndex = 4;
@@ -181,6 +178,7 @@
             Column1.HeaderText = "图片名称";
             Column1.MinimumWidth = 8;
             Column1.Name = "Column1";
+            Column1.ReadOnly = true;
             Column1.Width = 150;
             // 
             // Column2
@@ -188,6 +186,7 @@
             Column2.HeaderText = "本地状态";
             Column2.MinimumWidth = 8;
             Column2.Name = "Column2";
+            Column2.ReadOnly = true;
             Column2.Width = 150;
             // 
             // Column3
@@ -195,6 +194,7 @@
             Column3.HeaderText = "远端状态";
             Column3.MinimumWidth = 8;
             Column3.Name = "Column3";
+            Column3.ReadOnly = true;
             Column3.Width = 150;
             // 
             // ImageDetails_Label
@@ -245,7 +245,7 @@
             // Update_toolStripMenuItem
             // 
             Update_toolStripMenuItem.Name = "Update_toolStripMenuItem";
-            Update_toolStripMenuItem.Size = new Size(270, 34);
+            Update_toolStripMenuItem.Size = new Size(146, 34);
             Update_toolStripMenuItem.Text = "更新";
             Update_toolStripMenuItem.Click += Update_toolStripMenuItem_Click;
             // 
@@ -298,7 +298,6 @@
         private ProgressBar TaskProgress_Bar;
         private GroupBox Control_GroupBox;
         private Button Pull_Button;
-        private ToolStripStatusLabel toolStripStatusLabel1;
         private Button Push_Button;
         private DataGridView Details_dataGridView;
         private Label ImageDetails_Label;

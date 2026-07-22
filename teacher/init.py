@@ -157,18 +157,8 @@ def clear_database():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # 检查核心表是否存在
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'students'
-                )
-            """)
-            table_exists = cur.fetchone()['exists']
-            if not table_exists:
-                raise ProgrammingError("核心表 'students' 不存在")
-
             cur.execute("TRUNCATE TABLE students, tokens, assignments, uploads, init_completed CASCADE;")
+            cur.execute("DROP TABLE IF EXISTS init_completed;")
         conn.commit()
         print("数据库已清空。")
     except ProgrammingError as e:

@@ -28,7 +28,6 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             StatusStrip = new StatusStrip();
             JiuXu_Label = new ToolStripStatusLabel();
             toolStripProgressBar = new ToolStripProgressBar();
@@ -46,8 +45,6 @@
             Column3 = new DataGridViewTextBoxColumn();
             ImageDetails_Label = new Label();
             toolStrip1 = new ToolStrip();
-            toolStripDropDownButton2 = new ToolStripDropDownButton();
-            CheckSelfCrossing_toolStripMenuItem = new ToolStripMenuItem();
             toolStripDropDownButton1 = new ToolStripDropDownButton();
             Update_toolStripMenuItem = new ToolStripMenuItem();
             Refresh_Button = new Button();
@@ -209,29 +206,12 @@
             // toolStrip1
             // 
             toolStrip1.ImageScalingSize = new Size(24, 24);
-            toolStrip1.Items.AddRange(new ToolStripItem[] { toolStripDropDownButton2, toolStripDropDownButton1 });
+            toolStrip1.Items.AddRange(new ToolStripItem[] { toolStripDropDownButton1 });
             toolStrip1.Location = new Point(0, 0);
             toolStrip1.Name = "toolStrip1";
             toolStrip1.Size = new Size(759, 33);
             toolStrip1.TabIndex = 6;
             toolStrip1.Text = "toolStrip1";
-            // 
-            // toolStripDropDownButton2
-            // 
-            toolStripDropDownButton2.DisplayStyle = ToolStripItemDisplayStyle.Text;
-            toolStripDropDownButton2.DropDownItems.AddRange(new ToolStripItem[] { CheckSelfCrossing_toolStripMenuItem });
-            toolStripDropDownButton2.Image = (Image)resources.GetObject("toolStripDropDownButton2.Image");
-            toolStripDropDownButton2.ImageTransparentColor = Color.Magenta;
-            toolStripDropDownButton2.Name = "toolStripDropDownButton2";
-            toolStripDropDownButton2.Size = new Size(64, 28);
-            toolStripDropDownButton2.Text = "工具";
-            // 
-            // CheckSelfCrossing_toolStripMenuItem
-            // 
-            CheckSelfCrossing_toolStripMenuItem.Name = "CheckSelfCrossing_toolStripMenuItem";
-            CheckSelfCrossing_toolStripMenuItem.Size = new Size(182, 34);
-            CheckSelfCrossing_toolStripMenuItem.Text = "检测自交";
-            CheckSelfCrossing_toolStripMenuItem.Click += CheckSelfCrossing_toolStripMenuItem_Click;
             // 
             // toolStripDropDownButton1
             // 
@@ -245,7 +225,7 @@
             // Update_toolStripMenuItem
             // 
             Update_toolStripMenuItem.Name = "Update_toolStripMenuItem";
-            Update_toolStripMenuItem.Size = new Size(146, 34);
+            Update_toolStripMenuItem.Size = new Size(270, 34);
             Update_toolStripMenuItem.Text = "更新";
             Update_toolStripMenuItem.Click += Update_toolStripMenuItem_Click;
             // 
@@ -308,8 +288,6 @@
         private DataGridViewTextBoxColumn Column1;
         private DataGridViewTextBoxColumn Column2;
         private DataGridViewTextBoxColumn Column3;
-        private ToolStripDropDownButton toolStripDropDownButton2;
-        private ToolStripMenuItem CheckSelfCrossing_toolStripMenuItem;
         private ToolStripMenuItem Update_toolStripMenuItem;
     }
 }

@@ -1,5 +1,18 @@
 # ImageLabelTS 服务端
 
+ImageLabelTS 的**核心服务**，负责学生认证、任务下发（图片 + 已有标注打包）、标注结果接收与进度统计。默认监听 `0.0.0.0:12010`，同时为 `dash` 进度面板提供 `/api/overview` 数据源。
+
+## 功能概览
+
+| 能力 | 说明 |
+|------|------|
+| 认证 | 学生登录，bcrypt 校验密码，签发随机 Bearer Token（一人一令牌，重复登录使旧令牌失效） |
+| 任务下发 | 按分配表把图片与已上传标注打包为 ZIP 返回 |
+| 结果接收 | 校验 JSON 合法性、文件名与任务归属，原子写入并记录 MD5 |
+| 进度统计 | 提供个人状态与全局概览两个接口 |
+
+系统总览与整体架构请参见仓库根目录的 [`../README.md`](../README.md)。
+
 ## 技术栈
 
 - **后端**：Python 3.8+，Flask
@@ -269,6 +282,53 @@ gunicorn -w 4 -b 0.0.0.0:12010 server:app
 ├── assignments.json      # 分配结果（由 init.py 生成）
 ├── Images/               # 存放图片文件
 ├── results/              # 上传的标注文件（按学生子目录存放）
+├── logs/                 # 运行日志（app.log / access.log）
 ├── .init.lock            # 启动锁文件（防止并发初始化）
 └── README.md
 ```
+
+---
+
+## 数据库表结构
+
+`server.py` 启动时会自动创建以下表（`CREATE TABLE IF NOT EXISTS`）：
+
+| 表 | 字段 | 说明 |
+|----|------|------|
+| `students` | `name` (PK), `password_hash` | 学生与密码哈希 |
+| `tokens` | `token` (PK), `name` (UNIQUE, FK), `created_at` | 登录令牌，一人一令牌 |
+| `assignments` | `name`, `image_filename` (PK) | 学生 ↔ 图片分配关系 |
+| `uploads` | `name`, `image_basename` (PK), `hash`, `last_upload` | 上传记录与 MD5 |
+| `init_completed` | `done` | 初始化一次性标记 |
+
+初始化由文件锁 `.init.lock` + `init_completed` 标记保证多 worker 下只执行一次；首次初始化会把 `students.json` 与 `assignments.json` 同步入库。
+
+---
+
+## 运行日志
+
+`server.py` 使用 `RotatingFileHandler` 输出两类日志到 `logs/`：
+
+| 文件 | 内容 |
+|------|------|
+| `app.log` | 业务逻辑与错误（含登录、拉取、上传等操作记录） |
+| `access.log` | 每个 HTTP 请求的访问日志（含学生名、耗时、User-Agent） |
+
+可通过环境变量调整：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `LOG_LEVEL` | `INFO` | 日志级别 |
+| `LOG_MAX_BYTES` | `10485760`（10 MB） | 单文件大小上限 |
+| `LOG_BACKUP_COUNT` | `10` | 轮转备份数量 |
+
+---
+
+## 注意事项
+
+- ⚠️ **`init.py` 与 `server.py` 的建表语句并不一致**。`init.py` 的 `CREATE_TABLES_SQL` 使用 `student_name` / `image_name` / `result JSONB` 等字段，而 `server.py` 使用 `name` / `image_filename` / `image_basename` / `hash`。
+  由于 `server.py` 使用 `CREATE TABLE IF NOT EXISTS`，若先用 `init.py --init-schema` 建表，服务启动时**不会**修正字段差异，后续 `/login`、`/pull` 等接口会因列名不匹配而报错。建议**只由 `server.py` 首次启动自动建表**，或先将 `init.py` 的 DDL 与 `server.py` 对齐。
+- `/api/overview` 当前**未做认证**，任何能访问该端口的客户端都能读取全部学生进度，请通过防火墙/反向代理做访问控制。
+- `init.py --force` 会清空全部业务表与 `results/` 目录（含已有标注），操作不可恢复。
+- 上传文件限制为 **2 MB** 且仅允许 `.json`，文件名必须与分配的图片基名一致（如 `image1.json` ↔ `image1.jpg`）。
+- Windows 环境下 `server.py` 依赖 `fcntl` 模块（仅 Unix 可用），需在 Linux 或 WSL 下运行，或改用等价的跨平台文件锁实现。

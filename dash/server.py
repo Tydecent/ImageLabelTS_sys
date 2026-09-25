@@ -1,6 +1,7 @@
 import json
 import requests
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from io import BytesIO
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
 import bcrypt
 from functools import wraps
 import os
@@ -33,6 +34,8 @@ USERS = load_users()
 
 # ---------- 外部 API 地址 ----------
 OVERVIEW_API = "https://localhost:12010/api/overview"
+ADMIN_DOWNLOAD_API = os.environ.get("ADMIN_DOWNLOAD_API", "https://localhost:12010/admin/download")
+ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 
 # ---------- 装饰器：需要登录 ----------
 def login_required(f):
@@ -119,6 +122,31 @@ def get_data():
     # 管理员：直接返回全部
 
     return jsonify(result)
+
+@app.route('/api/admin/download')
+@login_required
+def admin_download():
+    if session.get('role') != 'admin':
+        return "Access Denied", 403
+    if not ADMIN_API_TOKEN:
+        return jsonify({'error': '未配置管理员 API 令牌'}), 503
+
+    try:
+        resp = requests.get(
+            ADMIN_DOWNLOAD_API,
+            headers={'Authorization': f'Bearer {ADMIN_API_TOKEN}'},
+            timeout=30,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        return jsonify({'error': f'无法下载标注包: {str(e)}'}), 502
+
+    return send_file(
+        BytesIO(resp.content),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='uploaded_annotations.zip',
+    )
 
 # ---------- 启动 ----------
 if __name__ == '__main__':

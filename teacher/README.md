@@ -271,6 +271,19 @@ gunicorn -w 4 -b 0.0.0.0:12010 server:app
 ```
 
 
+### 6. 管理员下载已上传标注
+
+**GET** `/admin/download`
+
+需要在请求头中携带教师端环境变量 `ADMIN_API_TOKEN` 对应的令牌：
+
+```text
+Authorization: Bearer <ADMIN_API_TOKEN>
+```
+
+成功响应为 `uploaded_annotations.zip`，其中按学生目录保存 `results/` 下所有已上传的 JSON 文件。未配置 `ADMIN_API_TOKEN` 时该接口不可用。
+
+
 
 ## 目录结构
 

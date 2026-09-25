@@ -28,6 +28,7 @@ from functools import wraps
 from psycopg2.errors import SerializationFailure
 import psycopg2.extensions
 import uuid
+import hmac
 
 # ---------------------------------------------------------------------------
 # 配置（通过环境变量或默认值）
@@ -53,6 +54,7 @@ ALLOWED_EXTENSIONS = {".json"}
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024)))  # 默认 10MB
 LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "10"))  # 保留 10 个备份文件
+ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
 
 pool = None
 
@@ -713,6 +715,43 @@ def create_app():
                 "uploaded": uploaded_all,
             }
         })
+
+    # -----------------------------------------------------------------------
+    # 6. 管理员下载全部已上传标注
+    # -----------------------------------------------------------------------
+    @app.route("/admin/download", methods=["GET"])
+    def admin_download():
+        auth_header = request.headers.get("Authorization", "")
+        provided_token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if not ADMIN_API_TOKEN or not hmac.compare_digest(provided_token, ADMIN_API_TOKEN):
+            app.logger.warning("管理员下载失败：无效的管理员 API 令牌，IP=%s", request.remote_addr)
+            abort(401, description="缺少或无效的管理员 API 令牌")
+
+        buffer = BytesIO()
+        packed_count = 0
+        uploads_root = UPLOADS_DIR.resolve()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as zf:
+            if UPLOADS_DIR.exists():
+                for json_path in UPLOADS_DIR.rglob("*.json"):
+                    if not json_path.is_file() or json_path.name.startswith(".tmp_"):
+                        continue
+                    resolved_path = json_path.resolve()
+                    try:
+                        archive_name = resolved_path.relative_to(uploads_root).as_posix()
+                    except ValueError:
+                        app.logger.warning("管理员下载跳过上传目录外文件：%s", json_path)
+                        continue
+                    zf.write(resolved_path, archive_name)
+                    packed_count += 1
+
+        buffer.seek(0)
+        app.logger.info("管理员下载标注包成功：文件数=%s", packed_count)
+        return send_file(
+            buffer,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name="uploaded_annotations.zip",
+        )
 
     # -----------------------------------------------------------------------
     # 错误处理

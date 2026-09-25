@@ -35,6 +35,8 @@ python server.py
 |--------|------|------|
 | `SECRET_KEY` | 环境变量 | Flask Session 签名密钥；未设置时使用 `os.urandom(24)`（每次重启失效） |
 | `OVERVIEW_API` | `server.py` 顶部常量 | 教师端概览接口地址，默认 `https://localhost:12010/api/overview` |
+| `ADMIN_DOWNLOAD_API` | 环境变量 | 教师端管理员下载接口地址，默认 `https://localhost:12010/admin/download` |
+| `ADMIN_API_TOKEN` | 环境变量 | 与教师端相同的管理员 API 令牌；未配置时禁用下载 |
 
 ### 数据文件
 
@@ -66,6 +68,7 @@ python server.py
 | `GET` | `/student` | 学生 | 学生面板页 |
 | `GET` | `/admin` | 管理员 | 管理员面板页 |
 | `GET` | `/api/data` | 登录 | 代理并过滤教师端 `/api/overview` 数据 |
+| `GET` | `/api/admin/download` | 管理员 | 代理下载全部已上传 JSON 的 ZIP 文件 |
 
 ## 目录结构
 

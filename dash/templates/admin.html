@@ -24,6 +24,10 @@
         .detail-row td { padding: 10px 20px; }
         .detail-list { margin: 0; padding-left: 20px; }
         .detail-list li { list-style: none; }
+        .toolbar { margin: 20px 0; }
+        .download-button { background: #007bff; color: white; border: 0; padding: 10px 16px; border-radius: 6px; cursor: pointer; }
+        .download-button:disabled { background: #6c757d; cursor: wait; }
+        .download-error { color: #dc3545; margin-left: 12px; }
     </style>
 </head>
 <body>
@@ -34,6 +38,10 @@
         </div>
         <div id="content">
             <div class="loading">加载数据中...</div>
+        </div>
+        <div class="toolbar">
+            <button id="download-button" class="download-button" onclick="downloadAnnotations()">下载已上传 JSON</button>
+            <span id="download-error" class="download-error"></span>
         </div>
     </div>
 
@@ -105,6 +113,30 @@
                 row.style.display = 'none';
             } else {
                 row.style.display = 'table-row';
+            }
+        }
+
+        async function downloadAnnotations() {
+            const button = document.getElementById('download-button');
+            const error = document.getElementById('download-error');
+            button.disabled = true;
+            error.textContent = '';
+            try {
+                const res = await fetch('/api/admin/download');
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || '下载失败');
+                }
+                const blob = await res.blob();
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'uploaded_annotations.zip';
+                link.click();
+                URL.revokeObjectURL(link.href);
+            } catch (err) {
+                error.textContent = err.message;
+            } finally {
+                button.disabled = false;
             }
         }
 

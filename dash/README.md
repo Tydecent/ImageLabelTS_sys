@@ -34,8 +34,7 @@ python server.py
 | 配置项 | 位置 | 说明 |
 |--------|------|------|
 | `SECRET_KEY` | 环境变量 | Flask Session 签名密钥；未设置时使用 `os.urandom(24)`（每次重启失效） |
-| `OVERVIEW_API` | `server.py` 顶部常量 | 教师端概览接口地址，默认 `https://localhost:12010/api/overview` |
-| `ADMIN_DOWNLOAD_API` | 环境变量 | 教师端管理员下载接口地址，默认 `https://localhost:12010/admin/download` |
+| `TEACHER_BASE_URL` | 环境变量 | 教师端服务基地址，默认 `http://localhost:12010`；`/api/overview` 与 `/admin/download` 均由它派生 |
 | `ADMIN_API_TOKEN` | 环境变量 | 与教师端相同的管理员 API 令牌；未配置时禁用下载 |
 
 ### 数据文件
@@ -87,5 +86,6 @@ dash/
 ## 注意事项
 
 - **用户列表在进程启动时一次性加载**，修改 `students.json` / `admin.json` 后需重启服务才能生效。
-- `OVERVIEW_API` 默认使用 `https://localhost:12010`，而教师端 `server.py` 默认以 HTTP 启动。请根据实际部署（反向代理或协议）调整该常量，否则 `/api/data` 会返回 `无法获取外部数据`。
+- 教师端 `server.py` 以**明文 HTTP** 监听 `12010`，对外 TLS 由反向代理（如 Cloudflare Tunnel）终结，因此 `TEACHER_BASE_URL` 默认是 `http://localhost:12010`。**请勿**因对外域名是 `https` 而改成 `https://localhost:12010`，否则 `/api/data` 会返回 `无法获取外部数据`，下载接口也会失败。
+- 上述两个接口均依赖 `TEACHER_BASE_URL`，如需跨机或经代理访问教师端，只需覆盖这一个环境变量。
 - 生产环境建议设置固定的 `SECRET_KEY`，并使用正式 WSGI 服务器（如 gunicorn）替代内置服务器。

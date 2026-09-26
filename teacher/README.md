@@ -341,7 +341,9 @@ Authorization: Bearer <ADMIN_API_TOKEN>
 
 - ⚠️ **`init.py` 与 `server.py` 的建表语句并不一致**。`init.py` 的 `CREATE_TABLES_SQL` 使用 `student_name` / `image_name` / `result JSONB` 等字段，而 `server.py` 使用 `name` / `image_filename` / `image_basename` / `hash`。
   由于 `server.py` 使用 `CREATE TABLE IF NOT EXISTS`，若先用 `init.py --init-schema` 建表，服务启动时**不会**修正字段差异，后续 `/login`、`/pull` 等接口会因列名不匹配而报错。建议**只由 `server.py` 首次启动自动建表**，或先将 `init.py` 的 DDL 与 `server.py` 对齐。
+- 本服务以**明文 HTTP** 监听 `12010`，自身不提供 HTTPS。对外 TLS 应由反向代理（如 Cloudflare Tunnel）终结，内网/本机调用方（如 `dash`）请使用 `http://` 访问。
 - `/api/overview` 当前**未做认证**，任何能访问该端口的客户端都能读取全部学生进度，请通过防火墙/反向代理做访问控制。
+- `/admin/download` 使用共享密钥 `ADMIN_API_TOKEN` 校验，该密钥通过 `Authorization: Bearer` 明文传输，请确保仅经由受信任的网络（TLS 终结后的内网）调用。
 - `init.py --force` 会清空全部业务表与 `results/` 目录（含已有标注），操作不可恢复。
 - 上传文件限制为 **2 MB** 且仅允许 `.json`，文件名必须与分配的图片基名一致（如 `image1.json` ↔ `image1.jpg`）。
 - Windows 环境下 `server.py` 依赖 `fcntl` 模块（仅 Unix 可用），需在 Linux 或 WSL 下运行，或改用等价的跨平台文件锁实现。

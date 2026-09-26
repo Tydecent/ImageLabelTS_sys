@@ -33,8 +33,11 @@ def load_users():
 USERS = load_users()
 
 # ---------- 外部 API 地址 ----------
-OVERVIEW_API = "https://localhost:12010/api/overview"
-ADMIN_DOWNLOAD_API = os.environ.get("ADMIN_DOWNLOAD_API", "https://localhost:12010/admin/download")
+# 教师端 server.py 以明文 HTTP 监听 12010，TLS 由外部反向代理（如 Cloudflare Tunnel）终结，
+# 因此这里必须使用 http:// 访问本机教师端。请勿因对外域名是 https 而改成 https://localhost。
+TEACHER_BASE_URL = os.environ.get("TEACHER_BASE_URL", "http://localhost:12010").rstrip("/")
+OVERVIEW_API = f"{TEACHER_BASE_URL}/api/overview"
+ADMIN_DOWNLOAD_API = f"{TEACHER_BASE_URL}/admin/download"
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 
 # ---------- 装饰器：需要登录 ----------
